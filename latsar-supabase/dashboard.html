@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Sistem Terminal</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+<script src="config.js"></script>
+<script src="shared.js"></script>
+<script>
+  const user = Auth.check();
+  buildSidebar('dashboard');
+</script>
+
+<div class="wrapper">
+  <div class="main-content">
+    <div class="page-header">
+      <h1>📊 Dashboard</h1>
+      <p id="tglHariIni"></p>
+    </div>
+
+    <!-- Filter -->
+    <div class="card">
+      <div class="filter-bar">
+        <div class="form-group">
+          <label>Terminal</label>
+          <select id="filterTerminal" onchange="onTerminalChange()">
+            <option value="Semua">Semua Terminal</option>
+            <option value="PURBALINGGA">Purbalingga</option>
+            <option value="BANJARNEGARA">Banjarnegara</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Layanan</label>
+          <select id="filterLayanan" onchange="loadDashboard()">
+            <option value="Semua">Semua Layanan</option>
+            <option value="AKAP">AKAP</option>
+            <option value="AKDP">AKDP</option>
+            <option value="TRANS JATENG" id="optTJ">TRANS JATENG</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bulan</label>
+          <select id="filterBulan" onchange="loadDashboard()">
+            <option value="1">Januari</option><option value="2">Februari</option>
+            <option value="3">Maret</option><option value="4">April</option>
+            <option value="5">Mei</option><option value="6">Juni</option>
+            <option value="7">Juli</option><option value="8">Agustus</option>
+            <option value="9">September</option><option value="10">Oktober</option>
+            <option value="11">November</option><option value="12">Desember</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tahun</label>
+          <select id="filterTahun" onchange="loadDashboard()"></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">🚌</div><div class="stat-value" id="statBus">-</div><div class="stat-label">Total Bus Masuk</div></div>
+      <div class="stat-card green"><div class="stat-icon">👥</div><div class="stat-value" id="statPnp">-</div><div class="stat-label">Total Penumpang</div></div>
+      <div class="stat-card orange"><div class="stat-icon">📊</div><div class="stat-value" id="statLF">-</div><div class="stat-label">Rata-rata Load Factor</div></div>
+      <div class="stat-card purple"><div class="stat-icon">🏢</div><div class="stat-value" id="statPO">-</div><div class="stat-label">Total PO</div></div>
+      <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value" id="statLaik">-</div><div class="stat-label">Laik Jalan</div></div>
+      <div class="stat-card red"><div class="stat-icon">❌</div><div class="stat-value" id="statTidak">-</div><div class="stat-label">Tidak Laik</div></div>
+      <div class="stat-card teal"><div class="stat-icon">🧍</div><div class="stat-value" id="statPgj">-</div><div class="stat-label">Total Pengunjung</div></div>
+      <div class="stat-card orange" id="cardTJ" style="display:none;"><div class="stat-icon">🚐</div><div class="stat-value" id="statTJ">-</div><div class="stat-label">Bus Trans Jateng</div></div>
+    </div>
+
+    <!-- Charts -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
+      <div class="card"><div class="card-title">📈 Bus Masuk Harian</div><canvas id="chartBus" height="200"></canvas></div>
+      <div class="card"><div class="card-title">👥 Penumpang Harian</div><canvas id="chartPnp" height="200"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:18px;"><div class="card-title">🧍 Pengunjung Harian</div><canvas id="chartPgj" height="100"></canvas></div>
+
+    <!-- Tabel Rekap -->
+    <div class="card">
+      <div class="card-title">📋 Rekap Bulanan</div>
+      <div class="table-wrapper">
+        <div class="loading" id="loadingRekap"><span class="spinner"></span> Memuat data...</div>
+        <table id="tabelRekap" style="display:none;">
+          <thead>
+            <tr>
+              <th>Tanggal</th><th>Terminal</th><th>Layanan</th><th>Jml PO</th>
+              <th>Bus Msk</th><th>BK</th><th>BS</th><th>BB</th><th>MPU</th>
+              <th>Seat</th><th>Penumpang</th><th>Load Factor</th>
+              <th>Pnp Naik</th><th>Pnp Turun</th><th>Laik</th><th>Tdk Laik</th>
+            </tr>
+          </thead>
+          <tbody id="bodyRekap"></tbody>
+        </table>
+        <p id="emptyRekap" style="display:none;text-align:center;color:#777;padding:20px;">Belum ada data untuk bulan ini</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const now = new Date();
+  document.getElementById('tglHariIni').textContent = now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  const tahunSel = document.getElementById('filterTahun');
+  for (let y = now.getFullYear(); y >= 2024; y--) {
+    const o = document.createElement('option'); o.value=y; o.textContent=y; tahunSel.appendChild(o);
+  }
+  document.getElementById('filterBulan').value = now.getMonth()+1;
+  document.getElementById('filterTahun').value = now.getFullYear();
+
+  let chartBus=null, chartPnp=null, chartPgj=null;
+
+  // Hitung hari terakhir bulan dengan benar
+  function tglAkhirBulan(tahun, bulan) {
+    return new Date(parseInt(tahun), parseInt(bulan), 0).getDate();
+  }
+  function tglRange(tahun, bulan) {
+    const pad = String(bulan).padStart(2,'0');
+    const akhir = tglAkhirBulan(tahun, bulan);
+    return { awal:`${tahun}-${pad}-01`, akhir:`${tahun}-${pad}-${String(akhir).padStart(2,'0')}` };
+  }
+
+  function onTerminalChange() {
+    const t = document.getElementById('filterTerminal').value;
+    const optTJ = document.getElementById('optTJ');
+    const fl = document.getElementById('filterLayanan');
+    if (t==='BANJARNEGARA') { optTJ.style.display='none'; if(fl.value==='TRANS JATENG') fl.value='Semua'; }
+    else optTJ.style.display='';
+    loadDashboard();
+  }
+
+  async function loadDashboard() {
+    const terminal = document.getElementById('filterTerminal').value;
+    const layanan  = document.getElementById('filterLayanan').value;
+    const bulan    = document.getElementById('filterBulan').value;
+    const tahun    = document.getElementById('filterTahun').value;
+    const { awal, akhir } = tglRange(tahun, bulan);
+
+    document.getElementById('loadingRekap').style.display='block';
+    document.getElementById('tabelRekap').style.display='none';
+    document.getElementById('emptyRekap').style.display='none';
+
+    // Query rekap pakai tanggal range (bukan bulan/tahun text yang bisa bermasalah)
+    let q = `rekap_bulanan?tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,layanan.asc`;
+    if (terminal !== 'Semua') q += `&terminal=eq.${terminal}`;
+    if (layanan  !== 'Semua') q += `&layanan=eq.${encodeURIComponent(layanan)}`;
+
+    let qPgj = `data_pengunjung?select=tanggal,jumlah_pengunjung,terminal&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`;
+    if (terminal && terminal !== 'Semua') qPgj += `&terminal=eq.${encodeURIComponent(terminal)}`;
+
+    try {
+      const [rekap, pgj] = await Promise.all([sbFetch(q), sbFetch(qPgj)]);
+      renderDashboard(rekap, pgj, terminal);
+    } catch(e) {
+      showToast('error','Gagal memuat data: '+e.message);
+      document.getElementById('loadingRekap').style.display='none';
+    }
+  }
+
+  function renderDashboard(rekap, pgj, terminal) {
+    let totalBus=0,totalPnp=0,totalSeat=0,totalLaik=0,totalTidak=0,totalPO=0,totalTJ=0;
+    const perTgl={};
+
+    rekap.forEach(r => {
+      totalBus  += r.bus_msk||0;
+      totalPnp  += r.penumpang||0;
+      totalSeat += r.seat||0;
+      totalLaik += r.laik_jalan||0;
+      totalTidak+= r.tidak_laik||0;
+      totalPO    = Math.max(totalPO, r.jml_po||0);
+      if (r.layanan==='TRANS JATENG') totalTJ += r.bus_msk||0;
+      const tgl = toDisplayDate(r.tanggal);
+      if (!perTgl[tgl]) perTgl[tgl]={bus:0,pnp:0};
+      perTgl[tgl].bus += r.bus_msk||0;
+      perTgl[tgl].pnp += r.penumpang||0;
+    });
+
+    const avgLF = totalSeat>0 ? ((totalPnp/totalSeat)*100).toFixed(1)+'%' : '0%';
+    document.getElementById('statBus').textContent   = totalBus.toLocaleString('id-ID');
+    document.getElementById('statPnp').textContent   = totalPnp.toLocaleString('id-ID');
+    document.getElementById('statLF').textContent    = avgLF;
+    document.getElementById('statPO').textContent    = totalPO;
+    document.getElementById('statLaik').textContent  = totalLaik.toLocaleString('id-ID');
+    document.getElementById('statTidak').textContent = totalTidak.toLocaleString('id-ID');
+
+    const cardTJ = document.getElementById('cardTJ');
+    if (terminal!=='BANJARNEGARA') { cardTJ.style.display=''; document.getElementById('statTJ').textContent=totalTJ.toLocaleString('id-ID'); }
+    else cardTJ.style.display='none';
+
+    // Pengunjung
+    let totalPgj=0; const perTglPgj={};
+    pgj.forEach(r => {
+      totalPgj += r.jumlah_pengunjung||0;
+      const tgl = toDisplayDate(r.tanggal);
+      if (!perTglPgj[tgl]) perTglPgj[tgl]=0;
+      perTglPgj[tgl] += r.jumlah_pengunjung||0;
+    });
+    document.getElementById('statPgj').textContent = totalPgj.toLocaleString('id-ID');
+
+    // Charts
+    const sortTgl = Object.keys(perTgl).sort((a,b)=>{
+      const [da,ma,ya]=a.split('/'); const [db,mb,yb]=b.split('/');
+      return new Date(ya,ma-1,da)-new Date(yb,mb-1,db);
+    });
+    const sortTglPgj = Object.keys(perTglPgj).sort((a,b)=>{
+      const [da,ma,ya]=a.split('/'); const [db,mb,yb]=b.split('/');
+      return new Date(ya,ma-1,da)-new Date(yb,mb-1,db);
+    });
+
+    if (chartBus) chartBus.destroy();
+    chartBus = new Chart(document.getElementById('chartBus'),{type:'bar',data:{labels:sortTgl,datasets:[{label:'Bus Masuk',data:sortTgl.map(t=>perTgl[t].bus),backgroundColor:'rgba(26,35,126,0.7)',borderRadius:4}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+
+    if (chartPnp) chartPnp.destroy();
+    chartPnp = new Chart(document.getElementById('chartPnp'),{type:'line',data:{labels:sortTgl,datasets:[{label:'Penumpang',data:sortTgl.map(t=>perTgl[t].pnp),borderColor:'#2e7d32',backgroundColor:'rgba(46,125,50,0.1)',tension:0.4,fill:true}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+
+    if (chartPgj) chartPgj.destroy();
+    chartPgj = new Chart(document.getElementById('chartPgj'),{type:'bar',data:{labels:sortTglPgj,datasets:[{label:'Pengunjung',data:sortTglPgj.map(t=>perTglPgj[t]),backgroundColor:'rgba(0,105,92,0.7)',borderRadius:4}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+
+    // Tabel rekap
+    const tbody = document.getElementById('bodyRekap');
+    tbody.innerHTML='';
+    if (!rekap.length) {
+      document.getElementById('loadingRekap').style.display='none';
+      document.getElementById('emptyRekap').style.display='block';
+      return;
+    }
+    rekap.forEach(r => {
+      const lf = r.seat>0 ? ((r.penumpang/r.seat)*100).toFixed(1) : 0;
+      const badgeClass = r.layanan==='TRANS JATENG'?'tj':r.layanan.toLowerCase();
+      tbody.innerHTML += `<tr>
+        <td>${toDisplayDate(r.tanggal)}</td><td>${r.terminal}</td>
+        <td><span class="badge badge-${badgeClass}">${r.layanan}</span></td>
+        <td>${r.jml_po}</td><td>${r.bus_msk}</td>
+        <td>${r.BK||0}</td><td>${r.BS||0}</td><td>${r.BB||0}</td><td>${r.MPU||0}</td>
+        <td>${r.seat}</td><td>${r.penumpang}</td><td>${lf}%</td>
+        <td>${r.pnp_naik}</td><td>${r.pnp_turun}</td>
+        <td>${r.laik_jalan}</td><td>${r.tidak_laik}</td>
+      </tr>`;
+    });
+    document.getElementById('loadingRekap').style.display='none';
+    document.getElementById('tabelRekap').style.display='table';
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

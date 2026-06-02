@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Sistem Terminal</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#1a237e 0%,#283593 50%,#0d47a1 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+    .wrap { width:100%; max-width:420px; padding:20px; }
+    .header { text-align:center; margin-bottom:30px; color:white; }
+    .header .icon { font-size:60px; margin-bottom:10px; }
+    .header h1 { font-size:22px; font-weight:700; margin-bottom:5px; }
+    .header p { font-size:13px; opacity:.8; }
+    .card { background:white; border-radius:16px; padding:35px 30px; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .card h2 { font-size:18px; color:#1a237e; margin-bottom:25px; font-weight:600; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:13px; font-weight:600; color:#555; margin-bottom:7px; }
+    .form-group input { width:100%; padding:12px 15px; border:2px solid #e0e0e0; border-radius:8px; font-size:14px; outline:none; transition:border-color .3s; }
+    .form-group input:focus { border-color:#1a237e; }
+    .btn-login { width:100%; padding:13px; background:linear-gradient(135deg,#1a237e,#0d47a1); color:white; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; margin-top:5px; }
+    .btn-login:disabled { opacity:.6; cursor:not-allowed; }
+    .btn-tamu { width:100%; padding:12px; background:white; color:#1a237e; border:2px solid #1a237e; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; margin-top:10px; transition:background .2s; }
+    .btn-tamu:hover { background:#f0f4ff; }
+    .btn-tamu:disabled { opacity:.6; cursor:not-allowed; }
+    .divider { text-align:center; color:#aaa; font-size:12px; margin:14px 0; position:relative; }
+    .divider::before,.divider::after { content:''; position:absolute; top:50%; width:42%; height:1px; background:#e0e0e0; }
+    .divider::before { left:0; } .divider::after { right:0; }
+    .alert { padding:10px 15px; border-radius:8px; font-size:13px; margin-bottom:15px; display:none; }
+    .alert-error { background:#ffebee; color:#c62828; border:1px solid #ffcdd2; }
+    .footer-text { text-align:center; color:white; font-size:12px; margin-top:20px; opacity:.7; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="icon">🚌</div>
+    <h1>Sistem Pendataan Terminal</h1>
+    <p>BPSPP Wilayah V — Purbalingga & Banjarnegara</p>
+  </div>
+  <div class="card">
+    <h2>Silakan Login</h2>
+    <div class="alert alert-error" id="alertError"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="Masukkan username" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Masukkan password"
+        onkeypress="if(event.key==='Enter') doLogin()" />
+    </div>
+    <button class="btn-login" id="btnLogin" onclick="doLogin()">🔐 Masuk</button>
+    <div class="divider">atau</div>
+    <button class="btn-tamu" id="btnTamu" onclick="masukTamu()">👁️ Lihat sebagai Tamu</button>
+  </div>
+  <div class="footer-text">Balai Pengelola Sarana Prasarana Perhubungan Wilayah V</div>
+</div>
+<script src="config.js"></script>
+<script>
+  if (Auth.get()) window.location.href = 'dashboard.html';
+
+  async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const btn = document.getElementById('btnLogin');
+    const alertEl = document.getElementById('alertError');
+    alertEl.style.display = 'none';
+
+    if (!username || !password) { showError('Username dan password wajib diisi!'); return; }
+    btn.disabled = true; btn.textContent = '⏳ Memproses...';
+
+    try {
+      const data = await sbFetch(`users?username=eq.${encodeURIComponent(username)}&aktif=eq.true&select=*`);
+      if (!data.length) { showError('Username tidak ditemukan!'); return; }
+      const user = data[0];
+      if (user.password !== password) { showError('Password salah!'); return; }
+      Auth.save({ id:user.id, username:user.username, nama:user.nama_lengkap, terminal:user.terminal, role:user.role });
+      window.location.href = 'dashboard.html';
+    } catch(e) {
+      showError('Gagal koneksi: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '🔐 Masuk';
+    }
+  }
+
+  function masukTamu() {
+    const btn = document.getElementById('btnTamu');
+    btn.disabled = true; btn.textContent = '⏳ Memproses...';
+    // Simpan session tamu - hanya bisa akses dashboard
+    Auth.save({ id:0, username:'tamu', nama:'Tamu', terminal:'Semua', role:'tamu' });
+    window.location.href = 'dashboard.html';
+    btn.disabled = false; btn.textContent = '👁️ Lihat sebagai Tamu';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('alertError');
+    el.textContent = msg; el.style.display = 'block';
+  }
+</script>
+</body>
+</html>

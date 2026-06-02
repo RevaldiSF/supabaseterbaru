@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laporan - Sistem Terminal</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    .laporan-wrapper { font-family: Calibri, 'Segoe UI', sans-serif; font-size: 11px; color: #000; }
+    .laporan-table { width:100%; border-collapse:collapse; font-size:10px; }
+    .laporan-table th, .laporan-table td { border:1px solid #000; padding:4px 6px; text-align:center; background:none !important; color:#000; }
+    .laporan-table th { background:#d9d9d9 !important; font-weight:bold; }
+    .laporan-table tr:hover td { background:none !important; }
+    .laporan-table .total-row td { font-weight:bold; background:#f0f0f0 !important; }
+    .ttd-area { margin-top:20px; display:flex; justify-content:flex-end; }
+    .ttd-inner { text-align:center; font-size:11px; line-height:1.8; min-width:250px; }
+
+    /* ── PRINT: sembunyikan semua kecuali printArea ── */
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        padding: 10px;
+        background: white;
+      }
+      .laporan-table { font-size: 8px !important; }
+      .laporan-table th, .laporan-table td { padding: 3px 4px !important; }
+      .laporan-table th { background:#d9d9d9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .laporan-table .total-row td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ttd-area { margin-top: 10px !important; }
+    }
+  </style>
+</head>
+<body>
+<script src="config.js"></script>
+<script src="shared.js"></script>
+<script>
+  const user = Auth.check();
+  buildSidebar('laporan');
+</script>
+
+<div class="wrapper">
+  <div class="main-content">
+    <div class="page-header">
+      <h1>📄 Cetak Laporan Bulanan</h1>
+      <p>Rekapitulasi pencatatan arus AKAP / AKDP / Trans Jateng</p>
+    </div>
+
+    <!-- Filter -->
+    <div class="card" id="cardFilter">
+      <div class="card-title">Filter Laporan</div>
+      <div class="filter-bar">
+        <div class="form-group">
+          <label>Terminal</label>
+          <select id="filterTerminal" onchange="onTerminalChange()">
+            <option value="PURBALINGGA">Purbalingga</option>
+            <option value="BANJARNEGARA">Banjarnegara</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Layanan</label>
+          <select id="filterLayanan">
+            <option value="AKAP">AKAP</option>
+            <option value="AKDP">AKDP</option>
+            <option value="TRANS JATENG" id="optTJ">Trans Jateng</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bulan</label>
+          <select id="filterBulan">
+            <option value="1">Januari</option><option value="2">Februari</option>
+            <option value="3">Maret</option><option value="4">April</option>
+            <option value="5">Mei</option><option value="6">Juni</option>
+            <option value="7">Juli</option><option value="8">Agustus</option>
+            <option value="9">September</option><option value="10">Oktober</option>
+            <option value="11">November</option><option value="12">Desember</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tahun</label>
+          <select id="filterTahun"></select>
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="previewLaporan()">🔍 Preview</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:15px;flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="cetakPDF()">🖨️ Cetak PDF</button>
+        <button class="btn btn-warning" onclick="downloadExcelRekap()">📊 Download Excel Rekap</button>
+        <button class="btn btn-primary" id="btnCetakSemua" onclick="downloadExcelLengkap()" style="background:#6a1b9a;">
+          📦 Cetak Keseluruhan (Excel)
+        </button>
+      </div>
+      <p style="font-size:12px;color:#777;margin-top:8px;">
+        ⚡ "Cetak Keseluruhan" menghasilkan 1 file Excel: Rekap AKAP, AKDP, Trans Jateng (Purbalingga), Rekap Pengunjung, dan sheet harian per tanggal.
+      </p>
+    </div>
+
+    <!-- Preview Area -->
+    <div class="card" id="previewArea" style="display:none;">
+      <div id="isiLaporan"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const BULAN_NAMA = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  let dataLaporan = [];
+
+  // Init
+  const now = new Date();
+  const tahunSel = document.getElementById('filterTahun');
+  for (let y = now.getFullYear(); y >= 2024; y--) {
+    const o = document.createElement('option'); o.value = y; o.textContent = y; tahunSel.appendChild(o);
+  }
+  document.getElementById('filterBulan').value = now.getMonth() + 1;
+  document.getElementById('filterTahun').value = now.getFullYear();
+
+  // Hitung tanggal akhir bulan yang benar (tidak hardcode 31)
+  function tglAkhirBulan(tahun, bulan) {
+    return new Date(parseInt(tahun), parseInt(bulan), 0).getDate();
+  }
+
+  function tglRange(tahun, bulan) {
+    const pad = String(bulan).padStart(2,'0');
+    const akhir = tglAkhirBulan(tahun, bulan);
+    return {
+      awal: `${tahun}-${pad}-01`,
+      akhir: `${tahun}-${pad}-${String(akhir).padStart(2,'0')}`
+    };
+  }
+
+  function onTerminalChange() {
+    const t = document.getElementById('filterTerminal').value;
+    const optTJ = document.getElementById('optTJ');
+    const fl = document.getElementById('filterLayanan');
+    if (t === 'BANJARNEGARA') { optTJ.style.display='none'; if (fl.value==='TRANS JATENG') fl.value='AKAP'; }
+    else optTJ.style.display = '';
+  }
+
+  async function previewLaporan() {
+    const terminal = document.getElementById('filterTerminal').value;
+    const layanan  = document.getElementById('filterLayanan').value;
+    const bulan    = document.getElementById('filterBulan').value;
+    const tahun    = document.getElementById('filterTahun').value;
+
+    document.getElementById('isiLaporan').innerHTML = '<div class="loading"><span class="spinner"></span> Memuat data rekap...</div>';
+    document.getElementById('previewArea').style.display = 'block';
+
+    try {
+      const { awal, akhir } = tglRange(tahun, bulan);
+      const data = await sbFetch(`rekap_bulanan?terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(layanan)}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`);
+      dataLaporan = data;
+      renderLaporan(data, terminal, layanan, bulan, tahun);
+    } catch(e) {
+      document.getElementById('isiLaporan').innerHTML = `<p style="color:red;">Error: ${e.message}</p>`;
+    }
+  }
+
+  function renderLaporan(data, terminal, layanan, bulan, tahun) {
+    const isAKDP = layanan === 'AKDP';
+    const bulanNama = BULAN_NAMA[parseInt(bulan)];
+    const tot = { jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak_laik:0 };
+
+    data.forEach(r => {
+      tot.jml_po     = Math.max(tot.jml_po, Number(r.jml_po)||0);
+      tot.bus_msk   += Number(r.bus_msk)||0;    tot.bus_klr  += Number(r.bus_klr)||0;
+      tot.BK        += Number(r.BK)||0;         tot.BS       += Number(r.BS)||0;
+      tot.BB        += Number(r.BB)||0;         tot.MPU      += Number(r.MPU)||0;
+      tot.seat      += Number(r.seat)||0;       tot.penumpang+= Number(r.penumpang)||0;
+      tot.pnp_naik  += Number(r.pnp_naik)||0;  tot.pnp_turun+= Number(r.pnp_turun)||0;
+      tot.laik      += Number(r.laik_jalan)||0; tot.tidak_laik+=Number(r.tidak_laik)||0;
+    });
+
+    const totalLF     = tot.seat > 0 ? ((tot.penumpang/tot.seat)*100).toFixed(2)+'%' : '0%';
+    const kolomMPU    = isAKDP ? '<th rowspan="2">MPU</th>' : '';
+    const kolomMPUTot = isAKDP ? `<td>${tot.MPU}</td>` : '';
+
+    let rows = '';
+    data.forEach((r, i) => {
+      const lf = Number(r.seat) > 0 ? ((Number(r.penumpang)/Number(r.seat))*100).toFixed(2)+'%' : '0%';
+      rows += `<tr>
+        <td>${i+1}</td><td>${toDisplayDate(r.tanggal)}</td><td>${r.jml_po}</td>
+        <td>${r.bus_msk}</td><td>${r.bus_klr}</td>
+        <td>${r.BK}</td><td>${r.BS}</td><td>${r.BB}</td>
+        ${isAKDP ? `<td>${r.MPU||0}</td>` : ''}
+        <td>${r.seat}</td><td>${r.penumpang}</td><td>${lf}</td>
+        <td>${r.pnp_turun}</td><td>${r.pnp_naik}</td>
+        <td>${r.laik_jalan}</td><td>${r.tidak_laik}</td><td></td>
+      </tr>`;
+    });
+
+    document.getElementById('isiLaporan').innerHTML = `
+    <div class="laporan-wrapper" id="printArea">
+      <div style="text-align:center;font-weight:bold;font-size:13px;text-transform:uppercase;line-height:1.6;margin-bottom:8px;">
+        REKAPITULASI PENCATATAN ARUS ${layanan}<br>TERMINAL ${terminal}
+      </div>
+      <table style="font-size:11px;margin-bottom:8px;">
+        <tr><td style="border:none;background:none;padding:1px 0;font-weight:bold;width:80px;">BULAN</td><td style="border:none;background:none;padding:1px 5px;">: ${bulanNama.toUpperCase()}</td></tr>
+        <tr><td style="border:none;background:none;padding:1px 0;font-weight:bold;">TERMINAL</td><td style="border:none;background:none;padding:1px 5px;">: ${terminal}</td></tr>
+        <tr><td style="border:none;background:none;padding:1px 0;font-weight:bold;">KAB / KOTA</td><td style="border:none;background:none;padding:1px 5px;">: ${terminal}</td></tr>
+      </table>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:2px;">
+        <div style="border:2px solid #000;padding:3px 12px;font-weight:bold;font-size:12px;">${layanan}</div>
+      </div>
+      <table class="laporan-table"><thead>
+        <tr>
+          <th rowspan="2">NO</th><th rowspan="2">TANGGAL</th><th rowspan="2">JUMLAH PO</th>
+          <th colspan="2">KENDARAAN</th>
+          <th colspan="${isAKDP?4:3}">JENIS BUS</th>
+          <th rowspan="2">JUMLAH SEAT</th><th rowspan="2">JUMLAH PNP</th>
+          <th rowspan="2">LOAD FACTOR (%)</th>
+          <th colspan="2">PENUMPANG</th>
+          <th colspan="2">KONDISI KENDARAAN</th>
+          <th rowspan="2">KETERANGAN</th>
+        </tr>
+        <tr>
+          <th>MASUK</th><th>KELUAR</th>
+          <th>BK</th><th>BS</th><th>BB</th>${kolomMPU}
+          <th>TURUN</th><th>NAIK</th>
+          <th>LAIK JALAN</th><th>TDK LAIK JALAN</th>
+        </tr>
+      </thead>
+      <tbody>${rows||'<tr><td colspan="20" style="text-align:center;">Belum ada data</td></tr>'}</tbody>
+      <tfoot><tr class="total-row">
+        <td colspan="2">JUMLAH :</td>
+        <td>${tot.jml_po}</td><td>${tot.bus_msk}</td><td>${tot.bus_klr}</td>
+        <td>${tot.BK}</td><td>${tot.BS}</td><td>${tot.BB}</td>${kolomMPUTot}
+        <td>${tot.seat}</td><td>${tot.penumpang}</td><td>${totalLF}</td>
+        <td>${tot.pnp_turun}</td><td>${tot.pnp_naik}</td>
+        <td>${tot.laik}</td><td>${tot.tidak_laik}</td><td></td>
+      </tr></tfoot></table>
+      <div class="ttd-area"><div class="ttd-inner">
+        <p>Mengetahui,</p>
+        <p>Plt. Kepala Seksi Angkutan BPSPP Wilayah V /</p>
+        <p>Kepala Seksi Lalu Lintas BPSPP Wilayah V</p>
+        <br><br><br>
+        <p><strong>BAMBANG SETIARTO, S.Hut</strong></p>
+        <p>Penata Tk. I</p>
+        <p>NIP. 19720717 199803 1 006</p>
+      </div></div>
+    </div>`;
+  }
+
+  function cetakPDF() {
+    if (!document.getElementById('printArea')) { showToast('error','Preview dulu sebelum cetak!'); return; }
+    window.print();
+  }
+
+  function downloadExcelRekap() {
+    if (!dataLaporan.length) { showToast('error','Preview dulu sebelum download!'); return; }
+    const terminal = document.getElementById('filterTerminal').value;
+    const layanan  = document.getElementById('filterLayanan').value;
+    const bulan    = document.getElementById('filterBulan').value;
+    const tahun    = document.getElementById('filterTahun').value;
+    const isAKDP   = layanan === 'AKDP';
+    const bulanNama= BULAN_NAMA[parseInt(bulan)];
+    const wb = XLSX.utils.book_new();
+    const ws = buatWsRekap(dataLaporan, layanan, terminal, bulanNama, tahun, isAKDP);
+    ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws, `Rekap ${layanan}`);
+    XLSX.writeFile(wb, `Rekap_${layanan}_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
+    showToast('success','File Excel berhasil didownload!');
+  }
+
+  async function downloadExcelLengkap() {
+    const terminal  = document.getElementById('filterTerminal').value;
+    const bulan     = document.getElementById('filterBulan').value;
+    const tahun     = document.getElementById('filterTahun').value;
+    const bulanNama = BULAN_NAMA[parseInt(bulan)];
+    const btn = document.getElementById('btnCetakSemua');
+    btn.disabled = true; btn.textContent = '⏳ Mengambil data...';
+    showToast('info','⏳ Sedang menyiapkan file Excel lengkap...');
+
+    try {
+      const layananList = terminal === 'PURBALINGGA' ? ['AKAP','AKDP','TRANS JATENG'] : ['AKAP','AKDP'];
+      const { awal, akhir } = tglRange(tahun, bulan);
+      const jumlahHari = tglAkhirBulan(tahun, bulan);
+
+      // Ambil semua data paralel
+      const [rekapAll, harian, pengunjung] = await Promise.all([
+        sbFetch(`rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=layanan.asc,tanggal.asc`),
+        sbFetch(`data_harian?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,layanan.asc,created_at.asc`, {headers:{'Range-Unit':'items','Range':'0-49999'}}),
+        sbFetch(`data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`)
+      ]);
+
+      const wb = XLSX.utils.book_new();
+
+      // ── Sheet Rekap per Layanan ──────────────────────────
+      layananList.forEach(layanan => {
+        const rekap = rekapAll.filter(r => r.layanan === layanan);
+        const isAKDP = layanan === 'AKDP';
+        const sheetName = layanan === 'TRANS JATENG' ? 'Rekap Trans Jateng' : `Rekap ${layanan}`;
+        const ws = buatWsRekap(rekap, layanan, terminal, bulanNama, tahun, isAKDP);
+        ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
+      // ── Sheet Rekap Pengunjung ───────────────────────────
+      const wsPgjData = buatWsPengunjung(pengunjung, terminal, bulanNama, tahun);
+      const wsPgj = XLSX.utils.aoa_to_sheet(wsPgjData);
+      wsPgj['!cols'] = [{wch:5},{wch:12},{wch:20},{wch:30}];
+      XLSX.utils.book_append_sheet(wb, wsPgj, 'Rekap Pengunjung');
+
+      // ── Sheet Harian per Tanggal ─────────────────────────
+      const bulanPad = String(bulan).padStart(2,'0');
+      for (let h = 1; h <= jumlahHari; h++) {
+        const tglStr = `${tahun}-${bulanPad}-${String(h).padStart(2,'0')}`;
+        const dataHari = harian.filter(r => r.tanggal === tglStr);
+        if (!dataHari.length) continue; // skip hari kosong
+
+        const wsHariData = buatWsHarian(dataHari, terminal, tglStr, layananList);
+        const wsHari = XLSX.utils.aoa_to_sheet(wsHariData);
+        wsHari['!cols'] = [{wch:5},{wch:10},{wch:14},{wch:20},{wch:16},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10},{wch:10},{wch:8},{wch:8},{wch:10},{wch:25},{wch:12},{wch:12},{wch:15}];
+        XLSX.utils.book_append_sheet(wb, wsHari, String(h));
+      }
+
+      XLSX.writeFile(wb, `Laporan_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
+      showToast('success','File Excel lengkap berhasil didownload!');
+    } catch(e) {
+      showToast('error','Gagal: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '📦 Cetak Keseluruhan (Excel)';
+    }
+  }
+
+  // ── Helper: worksheet rekap bulanan (dengan styling border & bold) ────────
+  function buatWsRekap(data, layanan, terminal, bulanNama, tahun, isAKDP) {
+    const judul = `REKAPITULASI PENCATATAN ARUS ${layanan} - TERMINAL ${terminal}`;
+    const h1 = ['NO','TANGGAL','JUMLAH PO','MASUK','KELUAR','BK','BS','BB'];
+    if (isAKDP) h1.push('MPU');
+    h1.push('SEAT','PENUMPANG','LOAD FACTOR (%)','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','KETERANGAN');
+    const nCols = h1.length;
+
+    // Susun rows: judul, info, kosong, header, data, total
+    const rows = [
+      [judul], [`BULAN: ${bulanNama.toUpperCase()} ${tahun}`],
+      [`TERMINAL: ${terminal}`], [],
+      h1
+    ];
+    const startDataRow = rows.length; // index row data pertama (0-based)
+
+    let tot = {jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak:0};
+    data.forEach((r,i) => {
+      const lf = Number(r.seat)>0 ? +((Number(r.penumpang)/Number(r.seat))*100).toFixed(2) : 0;
+      const row = [i+1, toDisplayDate(r.tanggal), r.jml_po, r.bus_msk, r.bus_klr, r.BK||0, r.BS||0, r.BB||0];
+      if (isAKDP) row.push(r.MPU||0);
+      row.push(r.seat||0, r.penumpang||0, lf, r.pnp_turun||0, r.pnp_naik||0, r.laik_jalan||0, r.tidak_laik||0, '');
+      rows.push(row);
+      tot.jml_po=Math.max(tot.jml_po,Number(r.jml_po)||0);
+      ['bus_msk','bus_klr','BK','BS','BB','MPU','seat','penumpang','pnp_naik','pnp_turun'].forEach(k=>tot[k]+=(Number(r[k])||0));
+      tot.laik+=Number(r.laik_jalan)||0; tot.tidak+=Number(r.tidak_laik)||0;
+    });
+    const lf = tot.seat>0 ? +((tot.penumpang/tot.seat)*100).toFixed(2) : 0;
+    const totRow = ['JUMLAH','',tot.jml_po,tot.bus_msk,tot.bus_klr,tot.BK,tot.BS,tot.BB];
+    if (isAKDP) totRow.push(tot.MPU);
+    totRow.push(tot.seat,tot.penumpang,lf,tot.pnp_turun,tot.pnp_naik,tot.laik,tot.tidak,'');
+    rows.push(totRow);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Set lebar kolom
+    ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
+
+    return ws;
+  }
+
+  // ── Helper: worksheet pengunjung ─────────────────────────────────────────
+  function buatWsPengunjung(data, terminal, bulanNama, tahun) {
+    const rows = [
+      [`REKAP PENGUNJUNG - TERMINAL ${terminal}`],
+      [`BULAN: ${bulanNama.toUpperCase()} ${tahun}`],
+      [],
+      ['NO','TANGGAL','JUMLAH PENGUNJUNG','KETERANGAN']
+    ];
+    let total = 0;
+    data.forEach((r,i) => {
+      rows.push([i+1, toDisplayDate(r.tanggal), r.jumlah_pengunjung||0, r.keterangan||'']);
+      total += Number(r.jumlah_pengunjung)||0;
+    });
+    rows.push(['JUMLAH','',total,'']);
+    return rows;
+  }
+
+  // ── Helper: worksheet harian per tanggal ──────────────────────────────────
+  function buatWsHarian(data, terminal, tglStr, layananList) {
+    const tglDisplay = toDisplayDate(tglStr);
+    const hari = getDayName(tglStr);
+    const rows = [];
+
+    layananList.forEach(layanan => {
+      const isAKDP = layanan === 'AKDP';
+      const dataLayanan = data.filter(r => r.layanan === layanan);
+
+      // Header section
+      rows.push([`PENCATATAN ARUS ${layanan} - TERMINAL ${terminal}`]);
+      rows.push(['Hari', '', hari]);
+      rows.push(['Tanggal', '', tglDisplay]);
+      rows.push(['Shift', '', 1]);
+      rows.push([]);
+
+      // Header tabel — tambah tanda [H] untuk styling nanti
+      const header = ['NO','JAM DATANG','NOMOR KENDARAAN','PT/KOPERASI','NAMA PO','JML PO','BK','BS','BB'];
+      if (isAKDP) header.push('MPU');
+      header.push('JUML SEAT','JUML PNP','TURUN','NAIK','JAM BERANGKAT','TRAYEK/JURUSAN','LAIK JALAN','TDK LAIK JALAN','KET');
+      rows.push(header);
+
+      if (!dataLayanan.length) {
+        rows.push(['Tidak ada data']);
+      } else {
+        const poSudah = {};
+        let poCount = 0;
+        let tot = {BK:0,BS:0,BB:0,MPU:0,seat:0,pnp:0,turun:0,naik:0,laik:0,tidak:0};
+
+        dataLayanan.forEach((r, i) => {
+          let tampilPO = '';
+          if (!poSudah[r.nama_po]) { poSudah[r.nama_po] = true; poCount++; tampilPO = 1; }
+          const row = [i+1, r.jam_datang||'', r.nomor_bus||'', r.koperasi||'', r.nama_po, tampilPO,
+                       r.BK||0, r.BS||0, r.BB||0];
+          if (isAKDP) row.push(r.MPU||0);
+          row.push(r.jml_seat||0, r.jml_pnp||0, r.pnp_turun||0, r.pnp_naik||0,
+                   r.jam_berangkat||'', r.trayek||'', r.laik||0, r.tidak_laik||0, '');
+          rows.push(row);
+
+          tot.BK+=Number(r.BK)||0; tot.BS+=Number(r.BS)||0; tot.BB+=Number(r.BB)||0; tot.MPU+=Number(r.MPU)||0;
+          tot.seat+=Number(r.jml_seat)||0; tot.pnp+=Number(r.jml_pnp)||0;
+          tot.turun+=Number(r.pnp_turun)||0; tot.naik+=Number(r.pnp_naik)||0;
+          tot.laik+=Number(r.laik)||0; tot.tidak+=Number(r.tidak_laik)||0;
+        });
+
+        const totRow = ['JUMLAH','','','','',poCount,tot.BK,tot.BS,tot.BB];
+        if (isAKDP) totRow.push(tot.MPU);
+        totRow.push(tot.seat,tot.pnp,tot.turun,tot.naik,'','',tot.laik,tot.tidak,'');
+        rows.push(totRow);
+      }
+      // Spasi antar section
+      rows.push([]); rows.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    return ws;
+  }
+
+  function getDayName(tglStr) {
+    const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    return days[new Date(tglStr + 'T00:00:00').getDay()];
+  }
+</script>
+</body>
+</html>
