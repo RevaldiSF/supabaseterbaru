@@ -249,7 +249,9 @@
   // ── Load histori nomor bus ───────────────────────────────────────────────
   async function loadHistoriBus() {
     try {
-      const data = await sbFetch(`data_harian?terminal=eq.${TERMINAL}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek&order=created_at.desc&limit=500`);
+     const data = await sbFetch(
+  `data_harian?terminal=eq.${TERMINAL}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek&order=created_at.desc&limit=500`
+);
       const seen = new Set();
       masterBus = data.filter(r => {
         if (!r.nomor_bus || seen.has(r.nomor_bus)) return false;
