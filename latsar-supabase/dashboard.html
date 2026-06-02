@@ -170,7 +170,7 @@
       totalSeat += r.seat||0;
       totalLaik += r.laik_jalan||0;
       totalTidak+= r.tidak_laik||0;
-      totalPO    = Math.max(totalPO, r.jml_po||0);
+      totalPO   += r.jml_po||0;
       if (r.layanan==='TRANS JATENG') totalTJ += r.bus_msk||0;
       const tgl = toDisplayDate(r.tanggal);
       if (!perTgl[tgl]) perTgl[tgl]={bus:0,pnp:0};
@@ -190,7 +190,7 @@
     if (terminal!=='BANJARNEGARA') { cardTJ.style.display=''; document.getElementById('statTJ').textContent=totalTJ.toLocaleString('id-ID'); }
     else cardTJ.style.display='none';
 
-    // Pengunjung
+    // ── Pengunjung — selalu dirender, tidak terpengaruh rekap kosong ──
     let totalPgj=0; const perTglPgj={};
     pgj.forEach(r => {
       totalPgj += r.jumlah_pengunjung||0;
@@ -200,7 +200,7 @@
     });
     document.getElementById('statPgj').textContent = totalPgj.toLocaleString('id-ID');
 
-    // Charts
+    // ── Charts ──
     const sortTgl = Object.keys(perTgl).sort((a,b)=>{
       const [da,ma,ya]=a.split('/'); const [db,mb,yb]=b.split('/');
       return new Date(ya,ma-1,da)-new Date(yb,mb-1,db);
@@ -219,13 +219,14 @@
     if (chartPgj) chartPgj.destroy();
     chartPgj = new Chart(document.getElementById('chartPgj'),{type:'bar',data:{labels:sortTglPgj,datasets:[{label:'Pengunjung',data:sortTglPgj.map(t=>perTglPgj[t]),backgroundColor:'rgba(0,105,92,0.7)',borderRadius:4}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
 
-    // Tabel rekap
+    // ── Tabel rekap ──
     const tbody = document.getElementById('bodyRekap');
     tbody.innerHTML='';
+    document.getElementById('loadingRekap').style.display='none';
     if (!rekap.length) {
-      document.getElementById('loadingRekap').style.display='none';
       document.getElementById('emptyRekap').style.display='block';
-      return;
+      document.getElementById('tabelRekap').style.display='none';
+      return; // hanya skip tabel, chart & pengunjung sudah dirender di atas
     }
     rekap.forEach(r => {
       const lf = r.seat>0 ? ((r.penumpang/r.seat)*100).toFixed(1) : 0;
@@ -240,7 +241,6 @@
         <td>${r.laik_jalan}</td><td>${r.tidak_laik}</td>
       </tr>`;
     });
-    document.getElementById('loadingRekap').style.display='none';
     document.getElementById('tabelRekap').style.display='table';
   }
 

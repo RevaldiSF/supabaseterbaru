@@ -168,7 +168,7 @@
     const tot = { jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak_laik:0 };
 
     data.forEach(r => {
-      tot.jml_po     = Math.max(tot.jml_po, Number(r.jml_po)||0);
+      tot.jml_po    += Number(r.jml_po)||0;
       tot.bus_msk   += Number(r.bus_msk)||0;    tot.bus_klr  += Number(r.bus_klr)||0;
       tot.BK        += Number(r.BK)||0;         tot.BS       += Number(r.BS)||0;
       tot.BB        += Number(r.BB)||0;         tot.MPU      += Number(r.MPU)||0;
@@ -352,7 +352,7 @@
       if (isAKDP) row.push(r.MPU||0);
       row.push(r.seat||0, r.penumpang||0, lf, r.pnp_turun||0, r.pnp_naik||0, r.laik_jalan||0, r.tidak_laik||0, '');
       rows.push(row);
-      tot.jml_po=Math.max(tot.jml_po,Number(r.jml_po)||0);
+      tot.jml_po+=(Number(r.jml_po)||0);
       ['bus_msk','bus_klr','BK','BS','BB','MPU','seat','penumpang','pnp_naik','pnp_turun'].forEach(k=>tot[k]+=(Number(r[k])||0));
       tot.laik+=Number(r.laik_jalan)||0; tot.tidak+=Number(r.tidak_laik)||0;
     });
