@@ -21,17 +21,26 @@
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
       #printArea {
-        position: absolute;
+        position: fixed;
         top: 0; left: 0;
         width: 100%;
         padding: 10px;
-        background: white;
+        background: white !important;
       }
-      .laporan-table { font-size: 8px !important; }
-      .laporan-table th, .laporan-table td { padding: 3px 4px !important; }
+      .laporan-table { font-size: 8px !important; width: 100% !important; display: table !important; }
+      .laporan-table thead { display: table-header-group !important; }
+      .laporan-table tbody { display: table-row-group !important; }
+      .laporan-table tr { display: table-row !important; page-break-inside: avoid; }
+      .laporan-table th, .laporan-table td {
+        display: table-cell !important;
+        padding: 3px 4px !important;
+        border: 1px solid #000 !important;
+        visibility: visible !important;
+      }
       .laporan-table th { background:#d9d9d9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .laporan-table .total-row td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .ttd-area { margin-top: 10px !important; }
+      .laporan-wrapper { display: block !important; visibility: visible !important; }
     }
   </style>
 </head>
@@ -274,24 +283,39 @@
     const tahun     = document.getElementById('filterTahun').value;
     const bulanNama = BULAN_NAMA[parseInt(bulan)];
     const btn = document.getElementById('btnCetakSemua');
-    btn.disabled = true; btn.textContent = '⏳ Mengambil data...';
-    showToast('info','⏳ Sedang menyiapkan file Excel lengkap...');
+    btn.disabled = true;
 
     try {
       const layananList = terminal === 'PURBALINGGA' ? ['AKAP','AKDP','TRANS JATENG'] : ['AKAP','AKDP'];
       const { awal, akhir } = tglRange(tahun, bulan);
       const jumlahHari = tglAkhirBulan(tahun, bulan);
 
-      // Ambil semua data paralel
-      const [rekapAll, harian, pengunjung] = await Promise.all([
-        sbFetch(`rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=layanan.asc,tanggal.asc`),
-        sbFetch(`data_harian?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,layanan.asc,created_at.asc`, {headers:{'Range-Unit':'items','Range':'0-49999'}}),
-        sbFetch(`data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`)
-      ]);
+      // Step 1 — Rekap bulanan
+      btn.textContent = '⏳ 1/3 Mengambil rekap bulanan...';
+      const rekapAll = await sbFetch(
+        `rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=layanan.asc,tanggal.asc`
+      );
 
+      // Step 2 — Data harian (ambil per layanan agar tidak timeout)
+      btn.textContent = '⏳ 2/3 Mengambil data harian...';
+      const harianArr = await Promise.all(
+        layananList.map(lay =>
+          sbFetch(`data_harian?terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(lay)}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,created_at.asc&limit=5000`)
+        )
+      );
+      const harian = harianArr.flat();
+
+      // Step 3 — Pengunjung
+      btn.textContent = '⏳ 3/3 Mengambil data pengunjung...';
+      const pengunjung = await sbFetch(
+        `data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`
+      );
+
+      // Generate Excel
+      btn.textContent = '⏳ Membuat file Excel...';
       const wb = XLSX.utils.book_new();
 
-      // ── Sheet Rekap per Layanan ──────────────────────────
+      // Sheet Rekap per Layanan
       layananList.forEach(layanan => {
         const rekap = rekapAll.filter(r => r.layanan === layanan);
         const isAKDP = layanan === 'AKDP';
@@ -301,19 +325,18 @@
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
 
-      // ── Sheet Rekap Pengunjung ───────────────────────────
+      // Sheet Rekap Pengunjung
       const wsPgjData = buatWsPengunjung(pengunjung, terminal, bulanNama, tahun);
       const wsPgj = XLSX.utils.aoa_to_sheet(wsPgjData);
       wsPgj['!cols'] = [{wch:5},{wch:12},{wch:20},{wch:30}];
       XLSX.utils.book_append_sheet(wb, wsPgj, 'Rekap Pengunjung');
 
-      // ── Sheet Harian per Tanggal ─────────────────────────
+      // Sheet Harian per Tanggal
       const bulanPad = String(bulan).padStart(2,'0');
       for (let h = 1; h <= jumlahHari; h++) {
         const tglStr = `${tahun}-${bulanPad}-${String(h).padStart(2,'0')}`;
         const dataHari = harian.filter(r => r.tanggal === tglStr);
-        if (!dataHari.length) continue; // skip hari kosong
-
+        if (!dataHari.length) continue;
         const wsHariData = buatWsHarian(dataHari, terminal, tglStr, layananList);
         const wsHari = XLSX.utils.aoa_to_sheet(wsHariData);
         wsHari['!cols'] = [{wch:5},{wch:10},{wch:14},{wch:20},{wch:16},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10},{wch:10},{wch:8},{wch:8},{wch:10},{wch:25},{wch:12},{wch:12},{wch:15}];
@@ -321,11 +344,13 @@
       }
 
       XLSX.writeFile(wb, `Laporan_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
-      showToast('success','File Excel lengkap berhasil didownload!');
+      showToast('success', `✅ File Excel berhasil didownload! (${harian.length} data harian)`);
     } catch(e) {
-      showToast('error','Gagal: ' + e.message);
+      showToast('error', 'Gagal: ' + e.message);
+      console.error(e);
     } finally {
-      btn.disabled = false; btn.textContent = '📦 Cetak Keseluruhan (Excel)';
+      btn.disabled = false;
+      btn.textContent = '📦 Cetak Keseluruhan (Excel)';
     }
   }
 
