@@ -289,62 +289,59 @@
       const layananList = terminal === 'PURBALINGGA' ? ['AKAP','AKDP','TRANS JATENG'] : ['AKAP','AKDP'];
       const { awal, akhir } = tglRange(tahun, bulan);
       const jumlahHari = tglAkhirBulan(tahun, bulan);
+      const bulanPad = String(bulan).padStart(2,'0');
 
-      // Step 1 — Rekap bulanan
-      btn.textContent = '⏳ 1/3 Mengambil rekap bulanan...';
+      // Step 1: Rekap bulanan
+      btn.textContent = '⏳ 1/3 Rekap bulanan...';
       const rekapAll = await sbFetch(
         `rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=layanan.asc,tanggal.asc`
       );
 
-      // Step 2 — Data harian (ambil per layanan agar tidak timeout)
-      btn.textContent = '⏳ 2/3 Mengambil data harian...';
-      const harianArr = await Promise.all(
-        layananList.map(lay =>
-          sbFetch(`data_harian?terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(lay)}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,created_at.asc&limit=5000`)
-        )
-      );
-      const harian = harianArr.flat();
+      // Step 2: Data harian SEQUENTIAL per layanan agar tidak timeout
+      btn.textContent = '⏳ 2/3 Data harian...';
+      let harian = [];
+      for (const lay of layananList) {
+        const d = await sbFetch(
+          `data_harian?terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(lay)}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,created_at.asc&limit=5000`
+        );
+        harian = harian.concat(d);
+      }
 
-      // Step 3 — Pengunjung
-      btn.textContent = '⏳ 3/3 Mengambil data pengunjung...';
+      // Step 3: Pengunjung
+      btn.textContent = '⏳ 3/3 Pengunjung...';
       const pengunjung = await sbFetch(
         `data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`
       );
 
-      // Generate Excel
-      btn.textContent = '⏳ Membuat file Excel...';
+      btn.textContent = '⏳ Membuat Excel...';
       const wb = XLSX.utils.book_new();
 
-      // Sheet Rekap per Layanan
+      // Sheet Rekap per Layanan (AKAP, AKDP, TRANS JATENG)
       layananList.forEach(layanan => {
         const rekap = rekapAll.filter(r => r.layanan === layanan);
-        const isAKDP = layanan === 'AKDP';
-        const sheetName = layanan === 'TRANS JATENG' ? 'Rekap Trans Jateng' : `Rekap ${layanan}`;
+        const isAKDP = layanan !== 'AKAP';
+        const sheetName = layanan === 'TRANS JATENG'
+          ? `Rekap Arus Trans Jateng`
+          : `Rekap Arus ${layanan} ${bulanNama}`;
         const ws = buatWsRekap(rekap, layanan, terminal, bulanNama, tahun, isAKDP);
-        ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
 
       // Sheet Rekap Pengunjung
-      const wsPgjData = buatWsPengunjung(pengunjung, terminal, bulanNama, tahun);
-      const wsPgj = XLSX.utils.aoa_to_sheet(wsPgjData);
-      wsPgj['!cols'] = [{wch:5},{wch:12},{wch:20},{wch:30}];
-      XLSX.utils.book_append_sheet(wb, wsPgj, 'Rekap Pengunjung');
+      const wsPgj = buatWsPengunjung(pengunjung, terminal, bulanNama, tahun);
+      XLSX.utils.book_append_sheet(wb, wsPgj, 'Rekap Data Pengunjung');
 
-      // Sheet Harian per Tanggal
-      const bulanPad = String(bulan).padStart(2,'0');
+      // Sheet Harian per Tanggal (1,2,3,...) — skip hari kosong
       for (let h = 1; h <= jumlahHari; h++) {
         const tglStr = `${tahun}-${bulanPad}-${String(h).padStart(2,'0')}`;
         const dataHari = harian.filter(r => r.tanggal === tglStr);
         if (!dataHari.length) continue;
-        const wsHariData = buatWsHarian(dataHari, terminal, tglStr, layananList);
-        const wsHari = XLSX.utils.aoa_to_sheet(wsHariData);
-        wsHari['!cols'] = [{wch:5},{wch:10},{wch:14},{wch:20},{wch:16},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10},{wch:10},{wch:8},{wch:8},{wch:10},{wch:25},{wch:12},{wch:12},{wch:15}];
+        const wsHari = buatWsHarian(dataHari, terminal, tglStr, layananList);
         XLSX.utils.book_append_sheet(wb, wsHari, String(h));
       }
 
       XLSX.writeFile(wb, `Laporan_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
-      showToast('success', `✅ File Excel berhasil didownload! (${harian.length} data harian)`);
+      showToast('success', `✅ Excel berhasil didownload! (${harian.length} data harian)`);
     } catch(e) {
       showToast('error', 'Gagal: ' + e.message);
       console.error(e);
@@ -354,86 +351,185 @@
     }
   }
 
-  // ── Helper: worksheet rekap bulanan (dengan styling border & bold) ────────
+  // ── Worksheet Rekap Bulanan — format persis Apps Script ─────────────────
   function buatWsRekap(data, layanan, terminal, bulanNama, tahun, isAKDP) {
-    const judul = `REKAPITULASI PENCATATAN ARUS ${layanan} - TERMINAL ${terminal}`;
-    const h1 = ['NO','TANGGAL','JUMLAH PO','MASUK','KELUAR','BK','BS','BB'];
-    if (isAKDP) h1.push('MPU');
-    h1.push('SEAT','PENUMPANG','LOAD FACTOR (%)','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','KETERANGAN');
-    const nCols = h1.length;
+    const rows = [];
+    rows.push([`REKAPITULASI PENCATATAN ARUS ${layanan} TERMINAL ${terminal}`]); // R1
+    rows.push([]);                                                                 // R2
+    rows.push(['BULAN','',`: ${bulanNama.toUpperCase()}`,'','','','','','','','','','','','','',layanan]); // R3
+    rows.push(['TERMINAL','',`: ${terminal}`]);                                   // R4
+    rows.push(['KAB / KOTA','',`: ${terminal}`]);                                 // R5
+    rows.push([]);                                                                 // R6
+    rows.push(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']); // R7
+    rows.push(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']); // R8
+    rows.push([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);           // R9
 
-    // Susun rows: judul, info, kosong, header, data, total
-    const rows = [
-      [judul], [`BULAN: ${bulanNama.toUpperCase()} ${tahun}`],
-      [`TERMINAL: ${terminal}`], [],
-      h1
-    ];
-    const startDataRow = rows.length; // index row data pertama (0-based)
-
+    const dataStartRow = 9;
     let tot = {jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak:0};
+
     data.forEach((r,i) => {
-      const lf = Number(r.seat)>0 ? +((Number(r.penumpang)/Number(r.seat))*100).toFixed(2) : 0;
-      const row = [i+1, toDisplayDate(r.tanggal), r.jml_po, r.bus_msk, r.bus_klr, r.BK||0, r.BS||0, r.BB||0];
-      if (isAKDP) row.push(r.MPU||0);
-      row.push(r.seat||0, r.penumpang||0, lf, r.pnp_turun||0, r.pnp_naik||0, r.laik_jalan||0, r.tidak_laik||0, '');
-      rows.push(row);
-      tot.jml_po+=(Number(r.jml_po)||0);
-      ['bus_msk','bus_klr','BK','BS','BB','MPU','seat','penumpang','pnp_naik','pnp_turun'].forEach(k=>tot[k]+=(Number(r[k])||0));
+      const lf = Number(r.seat)>0 ? Number(r.penumpang)/Number(r.seat) : 0;
+      rows.push([
+        i+1, toExcelDate(r.tanggal),
+        Number(r.jml_po)||0, Number(r.bus_msk)||0, Number(r.bus_klr)||0,
+        Number(r.BK)||0, Number(r.BS)||0, Number(r.BB)||0,
+        isAKDP ? (Number(r.MPU)||0) : '',
+        Number(r.seat)||0, Number(r.penumpang)||0, lf,
+        Number(r.pnp_turun)||0, Number(r.pnp_naik)||0,
+        Number(r.laik_jalan)||0, Number(r.tidak_laik)||0, ''
+      ]);
+      tot.jml_po+=Number(r.jml_po)||0; tot.bus_msk+=Number(r.bus_msk)||0; tot.bus_klr+=Number(r.bus_klr)||0;
+      tot.BK+=Number(r.BK)||0; tot.BS+=Number(r.BS)||0; tot.BB+=Number(r.BB)||0; tot.MPU+=Number(r.MPU)||0;
+      tot.seat+=Number(r.seat)||0; tot.penumpang+=Number(r.penumpang)||0;
+      tot.pnp_naik+=Number(r.pnp_naik)||0; tot.pnp_turun+=Number(r.pnp_turun)||0;
       tot.laik+=Number(r.laik_jalan)||0; tot.tidak+=Number(r.tidak_laik)||0;
     });
-    const lf = tot.seat>0 ? +((tot.penumpang/tot.seat)*100).toFixed(2) : 0;
-    const totRow = ['JUMLAH','',tot.jml_po,tot.bus_msk,tot.bus_klr,tot.BK,tot.BS,tot.BB];
-    if (isAKDP) totRow.push(tot.MPU);
-    totRow.push(tot.seat,tot.penumpang,lf,tot.pnp_turun,tot.pnp_naik,tot.laik,tot.tidak,'');
-    rows.push(totRow);
+
+    const lf_tot = tot.seat>0 ? tot.penumpang/tot.seat : 0;
+    const totRowIdx = rows.length;
+    rows.push(['JUMLAH :','',tot.jml_po,tot.bus_msk,tot.bus_klr,tot.BK,tot.BS,tot.BB,
+      isAKDP?tot.MPU:'',tot.seat,tot.penumpang,lf_tot,tot.pnp_turun,tot.pnp_naik,tot.laik,tot.tidak,'']);
+
+    rows.push([]); rows.push([]);
+    rows.push(['','','','','','','','','','','','Mengetahui,']);
+    rows.push(['','','','','','','','','','','','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
+    rows.push(['','','','','','','','','','','','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
+    rows.push([]); rows.push([]); rows.push([]);
+    rows.push(['','','','','','','','','','','','BAMBANG SETIARTO, S.Hut']);
+    rows.push(['','','','','','','','','','','','Penata Tk. I']);
+    rows.push(['','','','','','','','','','','','NIP. 19720717 199803 1 006']);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // Set lebar kolom
-    ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
+    ws['!merges'] = [
+      {s:{r:0,c:0},  e:{r:0,c:16}},
+      {s:{r:2,c:0},  e:{r:2,c:1}},
+      {s:{r:2,c:2},  e:{r:2,c:3}},
+      {s:{r:2,c:16}, e:{r:3,c:16}},
+      {s:{r:3,c:0},  e:{r:3,c:1}},
+      {s:{r:3,c:2},  e:{r:3,c:4}},
+      {s:{r:4,c:0},  e:{r:4,c:1}},
+      {s:{r:4,c:2},  e:{r:4,c:3}},
+      {s:{r:6,c:0},  e:{r:7,c:0}},
+      {s:{r:6,c:1},  e:{r:7,c:1}},
+      {s:{r:6,c:2},  e:{r:7,c:2}},
+      {s:{r:6,c:3},  e:{r:6,c:4}},
+      {s:{r:6,c:5},  e:{r:6,c:isAKDP?8:7}},
+      {s:{r:6,c:9},  e:{r:7,c:9}},
+      {s:{r:6,c:10}, e:{r:7,c:10}},
+      {s:{r:6,c:11}, e:{r:7,c:11}},
+      {s:{r:6,c:12}, e:{r:6,c:13}},
+      {s:{r:6,c:14}, e:{r:6,c:15}},
+      {s:{r:6,c:16}, e:{r:7,c:16}},
+      {s:{r:totRowIdx,c:0}, e:{r:totRowIdx,c:1}},
+    ];
+    if (!isAKDP) ws['!merges'].push({s:{r:6,c:7},e:{r:7,c:8}});
 
+    for (let i=0; i<data.length; i++) {
+      const rTgl = XLSX.utils.encode_cell({r:dataStartRow+i, c:1});
+      const rLF  = XLSX.utils.encode_cell({r:dataStartRow+i, c:11});
+      if (ws[rTgl]) { ws[rTgl].z='DD/MM/YYYY'; ws[rTgl].t='n'; }
+      if (ws[rLF])  ws[rLF].z='0.00%';
+    }
+    const lfTotRef = XLSX.utils.encode_cell({r:totRowIdx, c:11});
+    if (ws[lfTotRef]) ws[lfTotRef].z='0.00%';
+
+    ws['!cols'] = [{wch:4},{wch:13},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:12},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:14},{wch:15}];
     return ws;
   }
 
-  // ── Helper: worksheet pengunjung ─────────────────────────────────────────
+  // ── Worksheet Rekap Pengunjung ───────────────────────────────────────────
   function buatWsPengunjung(data, terminal, bulanNama, tahun) {
-    const rows = [
-      [`REKAP PENGUNJUNG - TERMINAL ${terminal}`],
-      [`BULAN: ${bulanNama.toUpperCase()} ${tahun}`],
-      [],
-      ['NO','TANGGAL','JUMLAH PENGUNJUNG','KETERANGAN']
-    ];
+    const rows = [];
+    rows.push([`REKAPITULASI PENCATATAN PENGUNJUNG TERMINAL ${terminal}`]);
+    rows.push([]);
+    rows.push(['BULAN','',`: ${bulanNama.toUpperCase()}`]);
+    rows.push(['TERMINAL','',`: ${terminal}`]);
+    rows.push(['KAB / KOTA','',`: ${terminal}`]);
+    rows.push([]);
+    rows.push(['NO','TANGGAL','JUMLAH PENGGUNJUNG ','KETERANGAN']);
+    rows.push([1,2,3,13]);
+
     let total = 0;
     data.forEach((r,i) => {
-      rows.push([i+1, toDisplayDate(r.tanggal), r.jumlah_pengunjung||0, r.keterangan||'']);
+      rows.push([i+1, toExcelDate(r.tanggal), Number(r.jumlah_pengunjung)||0, r.keterangan||'']);
       total += Number(r.jumlah_pengunjung)||0;
     });
-    rows.push(['JUMLAH','',total,'']);
-    return rows;
+    const totRowIdx = rows.length;
+    rows.push(['JUMLAH :','',total,'']);
+    rows.push([]); rows.push([]);
+    rows.push(['','Mengetahui,']);
+    rows.push(['','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
+    rows.push(['','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
+    rows.push([]); rows.push([]); rows.push([]);
+    rows.push(['','BAMBANG SETIARTO, S.Hut']);
+    rows.push(['','Penata Tk. I']);
+    rows.push(['','NIP. 19720717 199803 1 006']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!merges'] = [
+      {s:{r:0,c:0},e:{r:0,c:3}},
+      {s:{r:2,c:0},e:{r:2,c:1}}, {s:{r:3,c:0},e:{r:3,c:1}}, {s:{r:4,c:0},e:{r:4,c:1}},
+      {s:{r:totRowIdx,c:0},e:{r:totRowIdx,c:1}},
+    ];
+    for (let i=0; i<data.length; i++) {
+      const ref = XLSX.utils.encode_cell({r:8+i, c:1});
+      if (ws[ref]) { ws[ref].z='DD/MM/YYYY'; ws[ref].t='n'; }
+    }
+    ws['!cols'] = [{wch:4},{wch:13},{wch:20},{wch:30}];
+    return ws;
   }
 
-  // ── Helper: worksheet harian per tanggal ──────────────────────────────────
+  // ── Helper tanggal ke Excel serial ──────────────────────────────────────
+  function toExcelDate(tglStr) {
+    const d = new Date(tglStr + 'T00:00:00');
+    const epoch = new Date(1899, 11, 30);
+    return Math.round((d - epoch) / 86400000);
+  }
+
+  // ── Worksheet Harian per Tanggal ─────────────────────────────────────────
   function buatWsHarian(data, terminal, tglStr, layananList) {
     const tglDisplay = toDisplayDate(tglStr);
     const hari = getDayName(tglStr);
     const rows = [];
+    const merges = [];
 
-    layananList.forEach(layanan => {
-      const isAKDP = layanan === 'AKDP';
+    layananList.forEach((layanan, idx) => {
       const dataLayanan = data.filter(r => r.layanan === layanan);
+      if (idx > 0) rows.push([]);
 
-      // Header section
-      rows.push([`PENCATATAN ARUS ${layanan} - TERMINAL ${terminal}`]);
-      rows.push(['Hari', '', hari]);
-      rows.push(['Tanggal', '', tglDisplay]);
-      rows.push(['Shift', '', 1]);
+      const r0 = rows.length;
+      rows.push([`PENCATATAN ARUS ${layanan}`]);
+      rows.push([`TERMINAL ${terminal}`]);
       rows.push([]);
+      const r3 = rows.length;
+      rows.push([`Hari                   : ${hari}`,'','','','','','','','','','','','','','','','','',`FORM 1`]);
+      rows.push([`Tanggal            : ${tglDisplay}`]);
+      rows.push([`Shift                  : 1`]);
 
-      // Header tabel — tambah tanda [H] untuk styling nanti
-      const header = ['NO','JAM DATANG','NOMOR KENDARAAN','PT/KOPERASI','NAMA PO','JML PO','BK','BS','BB'];
-      if (isAKDP) header.push('MPU');
-      header.push('JUML SEAT','JUML PNP','TURUN','NAIK','JAM BERANGKAT','TRAYEK/JURUSAN','LAIK JALAN','TDK LAIK JALAN','KET');
-      rows.push(header);
+      const rH1 = rows.length;
+      rows.push(['No','Jam Datang','Nomor Kendaraan','PT/Koperasi ','Nama
+PO','JML  PO','JENIS BUS','','','','Jumlah Seat','Jumlah PNP','Penumpang','','Jam Berangkat','Trayek/Jurusan','Kondisi Kend.','','Ket.']);
+      rows.push(['','','','','','','BK','BS','BB','MPU','','','Turun','Naik','','','Laik Jalan','Tdk Laik Jalan','']);
+      rows.push([1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20]);
+
+      merges.push({s:{r:r0,c:0},   e:{r:r0,c:18}});
+      merges.push({s:{r:r0+1,c:0}, e:{r:r0+1,c:18}});
+      merges.push({s:{r:r3,c:0},   e:{r:r3,c:2}});
+      merges.push({s:{r:rH1,c:0},  e:{r:rH1+1,c:0}});
+      merges.push({s:{r:rH1,c:1},  e:{r:rH1+1,c:1}});
+      merges.push({s:{r:rH1,c:2},  e:{r:rH1+1,c:2}});
+      merges.push({s:{r:rH1,c:3},  e:{r:rH1+1,c:3}});
+      merges.push({s:{r:rH1,c:4},  e:{r:rH1+1,c:4}});
+      merges.push({s:{r:rH1,c:5},  e:{r:rH1+1,c:5}});
+      merges.push({s:{r:rH1,c:6},  e:{r:rH1,c:9}});
+      merges.push({s:{r:rH1,c:10}, e:{r:rH1+1,c:10}});
+      merges.push({s:{r:rH1,c:11}, e:{r:rH1+1,c:11}});
+      merges.push({s:{r:rH1,c:12}, e:{r:rH1,c:13}});
+      merges.push({s:{r:rH1,c:14}, e:{r:rH1+1,c:14}});
+      merges.push({s:{r:rH1,c:15}, e:{r:rH1+1,c:15}});
+      merges.push({s:{r:rH1,c:16}, e:{r:rH1,c:17}});
+      merges.push({s:{r:rH1,c:18}, e:{r:rH1+1,c:18}});
 
       if (!dataLayanan.length) {
         rows.push(['Tidak ada data']);
@@ -441,33 +537,34 @@
         const poSudah = {};
         let poCount = 0;
         let tot = {BK:0,BS:0,BB:0,MPU:0,seat:0,pnp:0,turun:0,naik:0,laik:0,tidak:0};
-
-        dataLayanan.forEach((r, i) => {
+        dataLayanan.forEach((r,i) => {
           let tampilPO = '';
-          if (!poSudah[r.nama_po]) { poSudah[r.nama_po] = true; poCount++; tampilPO = 1; }
-          const row = [i+1, r.jam_datang||'', r.nomor_bus||'', r.koperasi||'', r.nama_po, tampilPO,
-                       r.BK||0, r.BS||0, r.BB||0];
-          if (isAKDP) row.push(r.MPU||0);
-          row.push(r.jml_seat||0, r.jml_pnp||0, r.pnp_turun||0, r.pnp_naik||0,
-                   r.jam_berangkat||'', r.trayek||'', r.laik||0, r.tidak_laik||0, '');
-          rows.push(row);
-
+          if (r.nama_po && !poSudah[r.nama_po]) { poSudah[r.nama_po]=true; poCount++; tampilPO=1; }
+          rows.push([
+            i+1, r.jam_datang||'', r.nomor_bus||'', r.koperasi||'', r.nama_po||'', tampilPO,
+            Number(r.BK)||0, Number(r.BS)||0, Number(r.BB)||0, Number(r.MPU)||0,
+            Number(r.jml_seat)||0, Number(r.jml_pnp)||0,
+            Number(r.pnp_turun)||0, Number(r.pnp_naik)||0,
+            r.jam_berangkat||'', r.trayek||'',
+            Number(r.laik)||0, Number(r.tidak_laik)||0, r.keterangan||''
+          ]);
           tot.BK+=Number(r.BK)||0; tot.BS+=Number(r.BS)||0; tot.BB+=Number(r.BB)||0; tot.MPU+=Number(r.MPU)||0;
           tot.seat+=Number(r.jml_seat)||0; tot.pnp+=Number(r.jml_pnp)||0;
           tot.turun+=Number(r.pnp_turun)||0; tot.naik+=Number(r.pnp_naik)||0;
           tot.laik+=Number(r.laik)||0; tot.tidak+=Number(r.tidak_laik)||0;
         });
-
-        const totRow = ['JUMLAH','','','','',poCount,tot.BK,tot.BS,tot.BB];
-        if (isAKDP) totRow.push(tot.MPU);
-        totRow.push(tot.seat,tot.pnp,tot.turun,tot.naik,'','',tot.laik,tot.tidak,'');
-        rows.push(totRow);
+        rows.push(['JUMLAH','','','','',poCount,tot.BK,tot.BS,tot.BB,tot.MPU,
+          tot.seat,tot.pnp,tot.turun,tot.naik,'','',tot.laik,tot.tidak,'']);
       }
-      // Spasi antar section
-      rows.push([]); rows.push([]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!merges'] = merges;
+    ws['!cols'] = [
+      {wch:4},{wch:11},{wch:14},{wch:36},{wch:21},{wch:7},
+      {wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:8},
+      {wch:7},{wch:7},{wch:11},{wch:31},{wch:7},{wch:14},{wch:12}
+    ];
     return ws;
   }
 
@@ -475,6 +572,7 @@
     const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
     return days[new Date(tglStr + 'T00:00:00').getDay()];
   }
+
 </script>
 </body>
 </html>
