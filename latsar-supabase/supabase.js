@@ -9,6 +9,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ============================================================
 async function sbFetch(path, options = {}) {
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const isGet = !options.method || options.method === 'GET';
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -16,8 +17,7 @@ async function sbFetch(path, options = {}) {
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': options.prefer || '',
-      'Range-Unit': 'items',
-      'Range': '0-9999',
+      ...(isGet ? {'Range-Unit':'items','Range':'0-9999'} : {}),
       ...(options.headers || {})
     }
   });
