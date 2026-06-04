@@ -336,8 +336,10 @@
         const d = await sbFetch(
           `data_harian?terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(lay)}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,created_at.asc&limit=5000`
         );
+        console.log(`[DEBUG] ${lay}: ${d.length} rows, tgl pertama: ${d[0]?.tanggal}, tgl terakhir: ${d[d.length-1]?.tanggal}`);
         harian = harian.concat(d);
       }
+      console.log(`[DEBUG] Total harian: ${harian.length} rows`);
 
       btn.textContent = '⏳ 3/3 Pengunjung...';
       const pengunjung = await sbFetch(
