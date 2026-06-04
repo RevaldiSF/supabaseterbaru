@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Laporan - Sistem Terminal</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
     .laporan-wrapper { font-family: Calibri, 'Segoe UI', sans-serif; font-size: 11px; color: #000; }
     .laporan-table { width:100%; border-collapse:collapse; font-size:10px; }
@@ -261,20 +263,52 @@
     window.print();
   }
 
-  function downloadExcelRekap() {
+  async function downloadExcelRekap() {
     if (!dataLaporan.length) { showToast('error','Preview dulu sebelum download!'); return; }
     const terminal = document.getElementById('filterTerminal').value;
     const layanan  = document.getElementById('filterLayanan').value;
     const bulan    = document.getElementById('filterBulan').value;
     const tahun    = document.getElementById('filterTahun').value;
-    const isAKDP   = layanan === 'AKDP';
+    const isAKDP   = layanan !== 'AKAP';
     const bulanNama= BULAN_NAMA[parseInt(bulan)];
-    const wb = XLSX.utils.book_new();
-    const ws = buatWsRekap(dataLaporan, layanan, terminal, bulanNama, tahun, isAKDP);
-    ws['!cols'] = [{wch:5},{wch:12},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:10},{wch:12},{wch:8},{wch:8},{wch:12},{wch:12},{wch:12}];
-    XLSX.utils.book_append_sheet(wb, ws, `Rekap ${layanan}`);
-    XLSX.writeFile(wb, `Rekap_${layanan}_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
+    const wb = new ExcelJS.Workbook();
+    const sheetName = layanan === 'TRANS JATENG' ? 'Rekap Trans Jateng' : `Rekap Arus ${layanan} ${bulanNama}`;
+    buatWsRekap(wb, dataLaporan, layanan, terminal, bulanNama, tahun, isAKDP, sheetName);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    saveAs(blob, `Rekap_${layanan}_${terminal}_${bulanNama}_${tahun}.xlsx`);
     showToast('success','File Excel berhasil didownload!');
+  }
+
+  // ── Helper styling ExcelJS ──────────────────────────────────────────────
+  const borderThin = {
+    top:{style:'thin'}, bottom:{style:'thin'},
+    left:{style:'thin'}, right:{style:'thin'}
+  };
+  const borderMedium = {
+    top:{style:'medium'}, bottom:{style:'medium'},
+    left:{style:'medium'}, right:{style:'medium'}
+  };
+  function styleHeader(cell, bold=true, center=true, border=true) {
+    cell.font = {bold, name:'Arial', size:10};
+    if (center) cell.alignment = {horizontal:'center', vertical:'middle', wrapText:true};
+    if (border) cell.border = borderThin;
+    cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFD9D9D9'}};
+  }
+  function styleData(cell, center=true) {
+    cell.font = {name:'Arial', size:10};
+    if (center) cell.alignment = {horizontal:'center', vertical:'middle'};
+    cell.border = borderThin;
+  }
+  function styleTotal(cell) {
+    cell.font = {bold:true, name:'Arial', size:10};
+    cell.alignment = {horizontal:'center', vertical:'middle'};
+    cell.border = borderThin;
+    cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFF0F0F0'}};
+  }
+  function styleJudul(cell) {
+    cell.font = {bold:true, name:'Arial', size:11};
+    cell.alignment = {horizontal:'center', vertical:'middle'};
   }
 
   async function downloadExcelLengkap() {
@@ -291,13 +325,11 @@
       const jumlahHari = tglAkhirBulan(tahun, bulan);
       const bulanPad = String(bulan).padStart(2,'0');
 
-      // Step 1: Rekap bulanan
       btn.textContent = '⏳ 1/3 Rekap bulanan...';
       const rekapAll = await sbFetch(
-        `rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=layanan.asc,tanggal.asc`
+        `rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,layanan.asc&limit=5000`
       );
 
-      // Step 2: Data harian SEQUENTIAL per layanan agar tidak timeout
       btn.textContent = '⏳ 2/3 Data harian...';
       let harian = [];
       for (const lay of layananList) {
@@ -307,41 +339,38 @@
         harian = harian.concat(d);
       }
 
-      // Step 3: Pengunjung
       btn.textContent = '⏳ 3/3 Pengunjung...';
       const pengunjung = await sbFetch(
-        `data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc`
+        `data_pengunjung?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc&limit=500`
       );
 
       btn.textContent = '⏳ Membuat Excel...';
-      const wb = XLSX.utils.book_new();
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Sistem Terminal BPSPP';
 
-      // Sheet Rekap per Layanan (AKAP, AKDP, TRANS JATENG)
-      layananList.forEach(layanan => {
+      // Sheet Rekap per Layanan
+      for (const layanan of layananList) {
         const rekap = rekapAll.filter(r => r.layanan === layanan);
         const isAKDP = layanan !== 'AKAP';
-        const sheetName = layanan === 'TRANS JATENG'
-          ? `Rekap Arus Trans Jateng`
-          : `Rekap Arus ${layanan} ${bulanNama}`;
-        const ws = buatWsRekap(rekap, layanan, terminal, bulanNama, tahun, isAKDP);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      });
+        const sheetName = layanan === 'TRANS JATENG' ? 'Rekap Trans Jateng' : `Rekap Arus ${layanan} ${bulanNama}`;
+        buatWsRekap(wb, rekap, layanan, terminal, bulanNama, tahun, isAKDP, sheetName);
+      }
 
-      // Sheet Rekap Pengunjung
-      const wsPgj = buatWsPengunjung(pengunjung, terminal, bulanNama, tahun);
-      XLSX.utils.book_append_sheet(wb, wsPgj, 'Rekap Data Pengunjung');
+      // Sheet Pengunjung
+      buatWsPengunjung(wb, pengunjung, terminal, bulanNama, tahun);
 
-      // Sheet Harian per Tanggal (1,2,3,...) — skip hari kosong
+      // Sheet Harian per Tanggal
       for (let h = 1; h <= jumlahHari; h++) {
         const tglStr = `${tahun}-${bulanPad}-${String(h).padStart(2,'0')}`;
         const dataHari = harian.filter(r => r.tanggal === tglStr);
         if (!dataHari.length) continue;
-        const wsHari = buatWsHarian(dataHari, terminal, tglStr, layananList);
-        XLSX.utils.book_append_sheet(wb, wsHari, String(h));
+        buatWsHarian(wb, dataHari, terminal, tglStr, layananList, h);
       }
 
-      XLSX.writeFile(wb, `Laporan_${terminal}_${bulanNama}_${tahun}.xlsx`, {bookType:'xlsx', type:'binary'});
-      showToast('success', `✅ Excel berhasil didownload! (${harian.length} data harian)`);
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      saveAs(blob, `Laporan_${terminal}_${bulanNama}_${tahun}.xlsx`);
+      showToast('success', `✅ Excel berhasil didownload!`);
     } catch(e) {
       showToast('error', 'Gagal: ' + e.message);
       console.error(e);
@@ -351,33 +380,87 @@
     }
   }
 
-  // ── Worksheet Rekap Bulanan — format persis Apps Script ─────────────────
-  function buatWsRekap(data, layanan, terminal, bulanNama, tahun, isAKDP) {
-    const rows = [];
-    rows.push([`REKAPITULASI PENCATATAN ARUS ${layanan} TERMINAL ${terminal}`]); // R1
-    rows.push([]);                                                                 // R2
-    rows.push(['BULAN','',`: ${bulanNama.toUpperCase()}`,'','','','','','','','','','','','','',layanan]); // R3
-    rows.push(['TERMINAL','',`: ${terminal}`]);                                   // R4
-    rows.push(['KAB / KOTA','',`: ${terminal}`]);                                 // R5
-    rows.push([]);                                                                 // R6
-    rows.push(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']); // R7
-    rows.push(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']); // R8
-    rows.push([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);           // R9
+  // ── Sheet Rekap Bulanan dengan border & styling ──────────────────────────
+  function buatWsRekap(wb, data, layanan, terminal, bulanNama, tahun, isAKDP, sheetName) {
+    const ws = wb.addWorksheet(sheetName);
+    const nCols = 17;
 
-    const dataStartRow = 9;
+    // Lebar kolom
+    ws.columns = [
+      {width:4},{width:13},{width:10},{width:8},{width:8},
+      {width:5},{width:5},{width:5},{width:5},
+      {width:12},{width:10},{width:14},
+      {width:8},{width:8},{width:12},{width:14},{width:15}
+    ];
+
+    // R1: Judul
+    ws.addRow([`REKAPITULASI PENCATATAN ARUS ${layanan} TERMINAL ${terminal}`]);
+    ws.mergeCells(1,1,1,nCols);
+    styleJudul(ws.getCell(1,1));
+
+    // R2: kosong
+    ws.addRow([]);
+
+    // R3: BULAN
+    const r3 = ws.addRow(['BULAN','',`: ${bulanNama.toUpperCase()}`,'','','','','','','','','','','','','',layanan]);
+    ws.mergeCells(3,1,3,2); ws.mergeCells(3,3,3,4); ws.mergeCells(3,17,4,17);
+    r3.getCell(17).font = {bold:true, name:'Arial'};
+    r3.getCell(17).alignment = {horizontal:'center', vertical:'middle'};
+
+    // R4: TERMINAL
+    const r4 = ws.addRow(['TERMINAL','',`: ${terminal}`]);
+    ws.mergeCells(4,1,4,2); ws.mergeCells(4,3,4,5);
+
+    // R5: KAB/KOTA
+    ws.addRow(['KAB / KOTA','',`: ${terminal}`]);
+    ws.mergeCells(5,1,5,2); ws.mergeCells(5,3,5,4);
+
+    // R6: kosong
+    ws.addRow([]);
+
+    // R7: Header atas
+    const h1 = ws.addRow(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'MPU':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']);
+    ws.mergeCells(7,1,8,1);   // NO
+    ws.mergeCells(7,2,8,2);   // TANGGAL
+    ws.mergeCells(7,3,8,3);   // JUMLAH PO
+    ws.mergeCells(7,4,7,5);   // KENDARAAN
+    ws.mergeCells(7,6,7,isAKDP?9:8); // JENIS BUS
+    if (!isAKDP) ws.mergeCells(7,8,8,9); // BB kosong
+    ws.mergeCells(7,10,8,10); // SEAT
+    ws.mergeCells(7,11,8,11); // PNP
+    ws.mergeCells(7,12,8,12); // LF
+    ws.mergeCells(7,13,7,14); // PENUMPANG
+    ws.mergeCells(7,15,7,16); // KONDISI
+    ws.mergeCells(7,17,8,17); // KET
+    h1.eachCell(cell => styleHeader(cell));
+    h1.height = 30;
+
+    // R8: Header bawah
+    const h2 = ws.addRow(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']);
+    h2.eachCell(cell => styleHeader(cell));
+    h2.height = 25;
+
+    // R9: Nomor kolom
+    const h3 = ws.addRow([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);
+    h3.eachCell(cell => styleHeader(cell, false, true, true));
+
+    // Data rows
     let tot = {jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak:0};
-
     data.forEach((r,i) => {
       const lf = Number(r.seat)>0 ? Number(r.penumpang)/Number(r.seat) : 0;
-      rows.push([
-        i+1, toExcelDate(r.tanggal),
+      const tgl = new Date(r.tanggal + 'T00:00:00');
+      const row = ws.addRow([
+        i+1, tgl,
         Number(r.jml_po)||0, Number(r.bus_msk)||0, Number(r.bus_klr)||0,
         Number(r.BK)||0, Number(r.BS)||0, Number(r.BB)||0,
-        isAKDP ? (Number(r.MPU)||0) : '',
+        isAKDP?(Number(r.MPU)||0):'',
         Number(r.seat)||0, Number(r.penumpang)||0, lf,
         Number(r.pnp_turun)||0, Number(r.pnp_naik)||0,
         Number(r.laik_jalan)||0, Number(r.tidak_laik)||0, ''
       ]);
+      row.getCell(2).numFmt = 'DD/MM/YYYY';
+      row.getCell(12).numFmt = '0.00%';
+      row.eachCell(cell => styleData(cell));
       tot.jml_po+=Number(r.jml_po)||0; tot.bus_msk+=Number(r.bus_msk)||0; tot.bus_klr+=Number(r.bus_klr)||0;
       tot.BK+=Number(r.BK)||0; tot.BS+=Number(r.BS)||0; tot.BB+=Number(r.BB)||0; tot.MPU+=Number(r.MPU)||0;
       tot.seat+=Number(r.seat)||0; tot.penumpang+=Number(r.penumpang)||0;
@@ -385,161 +468,135 @@
       tot.laik+=Number(r.laik_jalan)||0; tot.tidak+=Number(r.tidak_laik)||0;
     });
 
+    // Total row
     const lf_tot = tot.seat>0 ? tot.penumpang/tot.seat : 0;
-    const totRowIdx = rows.length;
-    rows.push(['JUMLAH :','',tot.jml_po,tot.bus_msk,tot.bus_klr,tot.BK,tot.BS,tot.BB,
-      isAKDP?tot.MPU:'',tot.seat,tot.penumpang,lf_tot,tot.pnp_turun,tot.pnp_naik,tot.laik,tot.tidak,'']);
+    const totRowNum = ws.rowCount + 1;
+    const totRow = ws.addRow(['JUMLAH :','',tot.jml_po,tot.bus_msk,tot.bus_klr,
+      tot.BK,tot.BS,tot.BB,isAKDP?tot.MPU:'',
+      tot.seat,tot.penumpang,lf_tot,tot.pnp_turun,tot.pnp_naik,tot.laik,tot.tidak,'']);
+    ws.mergeCells(totRowNum,1,totRowNum,2);
+    totRow.getCell(12).numFmt = '0.00%';
+    totRow.eachCell(cell => styleTotal(cell));
 
-    rows.push([]); rows.push([]);
-    rows.push(['','','','','','','','','','','','Mengetahui,']);
-    rows.push(['','','','','','','','','','','','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
-    rows.push(['','','','','','','','','','','','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
-    rows.push([]); rows.push([]); rows.push([]);
-    rows.push(['','','','','','','','','','','','BAMBANG SETIARTO, S.Hut']);
-    rows.push(['','','','','','','','','','','','Penata Tk. I']);
-    rows.push(['','','','','','','','','','','','NIP. 19720717 199803 1 006']);
-
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-
-    ws['!merges'] = [
-      {s:{r:0,c:0},  e:{r:0,c:16}},
-      {s:{r:2,c:0},  e:{r:2,c:1}},
-      {s:{r:2,c:2},  e:{r:2,c:3}},
-      {s:{r:2,c:16}, e:{r:3,c:16}},
-      {s:{r:3,c:0},  e:{r:3,c:1}},
-      {s:{r:3,c:2},  e:{r:3,c:4}},
-      {s:{r:4,c:0},  e:{r:4,c:1}},
-      {s:{r:4,c:2},  e:{r:4,c:3}},
-      {s:{r:6,c:0},  e:{r:7,c:0}},
-      {s:{r:6,c:1},  e:{r:7,c:1}},
-      {s:{r:6,c:2},  e:{r:7,c:2}},
-      {s:{r:6,c:3},  e:{r:6,c:4}},
-      {s:{r:6,c:5},  e:{r:6,c:isAKDP?8:7}},
-      {s:{r:6,c:9},  e:{r:7,c:9}},
-      {s:{r:6,c:10}, e:{r:7,c:10}},
-      {s:{r:6,c:11}, e:{r:7,c:11}},
-      {s:{r:6,c:12}, e:{r:6,c:13}},
-      {s:{r:6,c:14}, e:{r:6,c:15}},
-      {s:{r:6,c:16}, e:{r:7,c:16}},
-      {s:{r:totRowIdx,c:0}, e:{r:totRowIdx,c:1}},
-    ];
-    if (!isAKDP) ws['!merges'].push({s:{r:6,c:7},e:{r:7,c:8}});
-
-    for (let i=0; i<data.length; i++) {
-      const rTgl = XLSX.utils.encode_cell({r:dataStartRow+i, c:1});
-      const rLF  = XLSX.utils.encode_cell({r:dataStartRow+i, c:11});
-      if (ws[rTgl]) { ws[rTgl].z='DD/MM/YYYY'; ws[rTgl].t='n'; }
-      if (ws[rLF])  ws[rLF].z='0.00%';
-    }
-    const lfTotRef = XLSX.utils.encode_cell({r:totRowIdx, c:11});
-    if (ws[lfTotRef]) ws[lfTotRef].z='0.00%';
-
-    ws['!cols'] = [{wch:4},{wch:13},{wch:10},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:5},{wch:12},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:14},{wch:15}];
-    return ws;
+    // TTD
+    ws.addRow([]); ws.addRow([]);
+    ws.addRow(['','','','','','','','','','','','Mengetahui,']);
+    ws.addRow(['','','','','','','','','','','','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
+    ws.addRow(['','','','','','','','','','','','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
+    ws.addRow([]); ws.addRow([]); ws.addRow([]);
+    ws.addRow(['','','','','','','','','','','','BAMBANG SETIARTO, S.Hut']);
+    ws.addRow(['','','','','','','','','','','','Penata Tk. I']);
+    ws.addRow(['','','','','','','','','','','','NIP. 19720717 199803 1 006']);
   }
 
-  // ── Worksheet Rekap Pengunjung ───────────────────────────────────────────
-  function buatWsPengunjung(data, terminal, bulanNama, tahun) {
-    const rows = [];
-    rows.push([`REKAPITULASI PENCATATAN PENGUNJUNG TERMINAL ${terminal}`]);
-    rows.push([]);
-    rows.push(['BULAN','',`: ${bulanNama.toUpperCase()}`]);
-    rows.push(['TERMINAL','',`: ${terminal}`]);
-    rows.push(['KAB / KOTA','',`: ${terminal}`]);
-    rows.push([]);
-    rows.push(['NO','TANGGAL','JUMLAH PENGGUNJUNG ','KETERANGAN']);
-    rows.push([1,2,3,13]);
+  // ── Sheet Rekap Pengunjung ───────────────────────────────────────────────
+  function buatWsPengunjung(wb, data, terminal, bulanNama, tahun) {
+    const ws = wb.addWorksheet('Rekap Data Pengunjung');
+    ws.columns = [{width:4},{width:13},{width:22},{width:30}];
+
+    ws.addRow([`REKAPITULASI PENCATATAN PENGUNJUNG TERMINAL ${terminal}`]);
+    ws.mergeCells(1,1,1,4); styleJudul(ws.getCell(1,1));
+    ws.addRow([]);
+    ws.addRow(['BULAN','',`: ${bulanNama.toUpperCase()}`]); ws.mergeCells(3,1,3,2);
+    ws.addRow(['TERMINAL','',`: ${terminal}`]); ws.mergeCells(4,1,4,2);
+    ws.addRow(['KAB / KOTA','',`: ${terminal}`]); ws.mergeCells(5,1,5,2);
+    ws.addRow([]);
+
+    const h1 = ws.addRow(['NO','TANGGAL','JUMLAH PENGGUNJUNG','KETERANGAN']);
+    h1.eachCell(cell => styleHeader(cell)); h1.height = 25;
+    const h2 = ws.addRow([1,2,3,13]);
+    h2.eachCell(cell => styleHeader(cell, false));
 
     let total = 0;
     data.forEach((r,i) => {
-      rows.push([i+1, toExcelDate(r.tanggal), Number(r.jumlah_pengunjung)||0, r.keterangan||'']);
+      const tgl = new Date(r.tanggal + 'T00:00:00');
+      const row = ws.addRow([i+1, tgl, Number(r.jumlah_pengunjung)||0, r.keterangan||'']);
+      row.getCell(2).numFmt = 'DD/MM/YYYY';
+      row.eachCell(cell => styleData(cell));
       total += Number(r.jumlah_pengunjung)||0;
     });
-    const totRowIdx = rows.length;
-    rows.push(['JUMLAH :','',total,'']);
-    rows.push([]); rows.push([]);
-    rows.push(['','Mengetahui,']);
-    rows.push(['','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
-    rows.push(['','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
-    rows.push([]); rows.push([]); rows.push([]);
-    rows.push(['','BAMBANG SETIARTO, S.Hut']);
-    rows.push(['','Penata Tk. I']);
-    rows.push(['','NIP. 19720717 199803 1 006']);
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!merges'] = [
-      {s:{r:0,c:0},e:{r:0,c:3}},
-      {s:{r:2,c:0},e:{r:2,c:1}}, {s:{r:3,c:0},e:{r:3,c:1}}, {s:{r:4,c:0},e:{r:4,c:1}},
-      {s:{r:totRowIdx,c:0},e:{r:totRowIdx,c:1}},
+    const totRowNum = ws.rowCount + 1;
+    const totRow = ws.addRow(['JUMLAH :','',total,'']);
+    ws.mergeCells(totRowNum,1,totRowNum,2);
+    totRow.eachCell(cell => styleTotal(cell));
+
+    ws.addRow([]); ws.addRow([]);
+    ws.addRow(['','Mengetahui,']);
+    ws.addRow(['','Plt. Kepala Seksi Angkutan BPSPP Wilayah V']);
+    ws.addRow(['','Kepala Seksi Lalu Lintas BPSPP Wilayah V']);
+    ws.addRow([]); ws.addRow([]); ws.addRow([]);
+    ws.addRow(['','BAMBANG SETIARTO, S.Hut']);
+    ws.addRow(['','Penata Tk. I']);
+    ws.addRow(['','NIP. 19720717 199803 1 006']);
+  }
+
+  // ── Sheet Harian per Tanggal ─────────────────────────────────────────────
+  function buatWsHarian(wb, data, terminal, tglStr, layananList, hariKe) {
+    const ws = wb.addWorksheet(String(hariKe));
+    ws.columns = [
+      {width:4},{width:11},{width:14},{width:36},{width:21},
+      {width:7},{width:5},{width:5},{width:5},{width:5},
+      {width:8},{width:8},{width:7},{width:7},
+      {width:11},{width:31},{width:7},{width:14},{width:12}
     ];
-    for (let i=0; i<data.length; i++) {
-      const ref = XLSX.utils.encode_cell({r:8+i, c:1});
-      if (ws[ref]) { ws[ref].z='DD/MM/YYYY'; ws[ref].t='n'; }
-    }
-    ws['!cols'] = [{wch:4},{wch:13},{wch:20},{wch:30}];
-    return ws;
-  }
-
-  // ── Helper tanggal ke Excel serial ──────────────────────────────────────
-  function toExcelDate(tglStr) {
-    const d = new Date(tglStr + 'T00:00:00');
-    const epoch = new Date(1899, 11, 30);
-    return Math.round((d - epoch) / 86400000);
-  }
-
-  // ── Worksheet Harian per Tanggal ─────────────────────────────────────────
-  function buatWsHarian(data, terminal, tglStr, layananList) {
     const tglDisplay = toDisplayDate(tglStr);
     const hari = getDayName(tglStr);
-    const rows = [];
-    const merges = [];
+    const nCols = 19;
 
     layananList.forEach((layanan, idx) => {
       const dataLayanan = data.filter(r => r.layanan === layanan);
-      if (idx > 0) rows.push([]);
+      if (idx > 0) ws.addRow([]);
 
-      const r0 = rows.length;
-      rows.push([`PENCATATAN ARUS ${layanan}`]);
-      rows.push([`TERMINAL ${terminal}`]);
-      rows.push([]);
-      const r3 = rows.length;
-      rows.push([`Hari                   : ${hari}`,'','','','','','','','','','','','','','','','','',`FORM 1`]);
-      rows.push([`Tanggal            : ${tglDisplay}`]);
-      rows.push([`Shift                  : 1`]);
+      const r1Num = ws.rowCount + 1;
+      ws.addRow([`PENCATATAN ARUS ${layanan}`]);
+      ws.mergeCells(r1Num,1,r1Num,nCols); styleJudul(ws.getCell(r1Num,1));
 
-      const rH1 = rows.length;
-      rows.push(['No','Jam Datang','Nomor Kendaraan','PT/Koperasi ','Nama PO','JML  PO','JENIS BUS','','','','Jumlah Seat','Jumlah PNP','Penumpang','','Jam Berangkat','Trayek/Jurusan','Kondisi Kend.','','Ket.']);
-      rows.push(['','','','','','','BK','BS','BB','MPU','','','Turun','Naik','','','Laik Jalan','Tdk Laik Jalan','']);
-      rows.push([1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20]);
+      const r2Num = ws.rowCount + 1;
+      ws.addRow([`TERMINAL ${terminal}`]);
+      ws.mergeCells(r2Num,1,r2Num,nCols); styleJudul(ws.getCell(r2Num,1));
 
-      merges.push({s:{r:r0,c:0},   e:{r:r0,c:18}});
-      merges.push({s:{r:r0+1,c:0}, e:{r:r0+1,c:18}});
-      merges.push({s:{r:r3,c:0},   e:{r:r3,c:2}});
-      merges.push({s:{r:rH1,c:0},  e:{r:rH1+1,c:0}});
-      merges.push({s:{r:rH1,c:1},  e:{r:rH1+1,c:1}});
-      merges.push({s:{r:rH1,c:2},  e:{r:rH1+1,c:2}});
-      merges.push({s:{r:rH1,c:3},  e:{r:rH1+1,c:3}});
-      merges.push({s:{r:rH1,c:4},  e:{r:rH1+1,c:4}});
-      merges.push({s:{r:rH1,c:5},  e:{r:rH1+1,c:5}});
-      merges.push({s:{r:rH1,c:6},  e:{r:rH1,c:9}});
-      merges.push({s:{r:rH1,c:10}, e:{r:rH1+1,c:10}});
-      merges.push({s:{r:rH1,c:11}, e:{r:rH1+1,c:11}});
-      merges.push({s:{r:rH1,c:12}, e:{r:rH1,c:13}});
-      merges.push({s:{r:rH1,c:14}, e:{r:rH1+1,c:14}});
-      merges.push({s:{r:rH1,c:15}, e:{r:rH1+1,c:15}});
-      merges.push({s:{r:rH1,c:16}, e:{r:rH1,c:17}});
-      merges.push({s:{r:rH1,c:18}, e:{r:rH1+1,c:18}});
+      ws.addRow([]);
+
+      const r4Num = ws.rowCount + 1;
+      const r4 = ws.addRow([`Hari                   : ${hari}`,'','','','','','','','','','','','','','','','','',`FORM 1`]);
+      ws.mergeCells(r4Num,1,r4Num,3);
+      r4.getCell(19).font = {bold:true, name:'Arial'};
+
+      ws.addRow([`Tanggal            : ${tglDisplay}`]);
+      ws.addRow([`Shift                  : 1`]);
+
+      // Header
+      const rH1 = ws.rowCount + 1;
+      const h1 = ws.addRow(['No','Jam Datang','Nomor Kendaraan','PT/Koperasi','Nama PO','JML PO','JENIS BUS','','','','Jumlah Seat','Jumlah PNP','Penumpang','','Jam Berangkat','Trayek/Jurusan','Kondisi Kend.','','Ket.']);
+      const rH2 = ws.rowCount + 1;
+      const h2 = ws.addRow(['','','','','','','BK','BS','BB','MPU','','','Turun','Naik','','','Laik Jalan','Tdk Laik Jalan','']);
+      const rH3 = ws.rowCount + 1;
+      const h3 = ws.addRow([1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20]);
+
+      // Merges header
+      ws.mergeCells(rH1,1,rH2,1); ws.mergeCells(rH1,2,rH2,2); ws.mergeCells(rH1,3,rH2,3);
+      ws.mergeCells(rH1,4,rH2,4); ws.mergeCells(rH1,5,rH2,5); ws.mergeCells(rH1,6,rH2,6);
+      ws.mergeCells(rH1,7,rH1,10); ws.mergeCells(rH1,11,rH2,11); ws.mergeCells(rH1,12,rH2,12);
+      ws.mergeCells(rH1,13,rH1,14); ws.mergeCells(rH1,15,rH2,15); ws.mergeCells(rH1,16,rH2,16);
+      ws.mergeCells(rH1,17,rH1,18); ws.mergeCells(rH1,19,rH2,19);
+
+      h1.eachCell(cell => styleHeader(cell)); h1.height = 30;
+      h2.eachCell(cell => styleHeader(cell)); h2.height = 25;
+      h3.eachCell(cell => styleHeader(cell, false));
 
       if (!dataLayanan.length) {
-        rows.push(['Tidak ada data']);
+        const eRow = ws.addRow(['Tidak ada data']);
+        ws.mergeCells(ws.rowCount,1,ws.rowCount,nCols);
+        eRow.getCell(1).alignment = {horizontal:'center'};
+        eRow.getCell(1).border = borderThin;
       } else {
-        const poSudah = {};
-        let poCount = 0;
+        const poSudah = {}; let poCount = 0;
         let tot = {BK:0,BS:0,BB:0,MPU:0,seat:0,pnp:0,turun:0,naik:0,laik:0,tidak:0};
         dataLayanan.forEach((r,i) => {
           let tampilPO = '';
           if (r.nama_po && !poSudah[r.nama_po]) { poSudah[r.nama_po]=true; poCount++; tampilPO=1; }
-          rows.push([
+          const row = ws.addRow([
             i+1, r.jam_datang||'', r.nomor_bus||'', r.koperasi||'', r.nama_po||'', tampilPO,
             Number(r.BK)||0, Number(r.BS)||0, Number(r.BB)||0, Number(r.MPU)||0,
             Number(r.jml_seat)||0, Number(r.jml_pnp)||0,
@@ -547,24 +604,19 @@
             r.jam_berangkat||'', r.trayek||'',
             Number(r.laik)||0, Number(r.tidak_laik)||0, r.keterangan||''
           ]);
+          row.eachCell(cell => styleData(cell));
           tot.BK+=Number(r.BK)||0; tot.BS+=Number(r.BS)||0; tot.BB+=Number(r.BB)||0; tot.MPU+=Number(r.MPU)||0;
           tot.seat+=Number(r.jml_seat)||0; tot.pnp+=Number(r.jml_pnp)||0;
           tot.turun+=Number(r.pnp_turun)||0; tot.naik+=Number(r.pnp_naik)||0;
           tot.laik+=Number(r.laik)||0; tot.tidak+=Number(r.tidak_laik)||0;
         });
-        rows.push(['JUMLAH','','','','',poCount,tot.BK,tot.BS,tot.BB,tot.MPU,
+        const totRowNum = ws.rowCount + 1;
+        const totRow = ws.addRow(['JUMLAH','','','','',poCount,tot.BK,tot.BS,tot.BB,tot.MPU,
           tot.seat,tot.pnp,tot.turun,tot.naik,'','',tot.laik,tot.tidak,'']);
+        ws.mergeCells(totRowNum,1,totRowNum,5);
+        totRow.eachCell(cell => styleTotal(cell));
       }
     });
-
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!merges'] = merges;
-    ws['!cols'] = [
-      {wch:4},{wch:11},{wch:14},{wch:36},{wch:21},{wch:7},
-      {wch:5},{wch:5},{wch:5},{wch:5},{wch:8},{wch:8},
-      {wch:7},{wch:7},{wch:11},{wch:31},{wch:7},{wch:14},{wch:12}
-    ];
-    return ws;
   }
 
   function getDayName(tglStr) {
