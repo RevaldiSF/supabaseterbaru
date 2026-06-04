@@ -5,7 +5,7 @@ Tidak butuh Google Apps Script sama sekali.
 
 ## Struktur File
 ```
-config.js          → Konfigurasi Supabase URL & API Key
+config.js          → Konfigurasi Supabase URL & API Key 
 shared.js          → CSS, sidebar, toast, helper functions
 login.html         → Halaman login
 dashboard.html     → Dashboard statistik & grafik
