@@ -3,7 +3,7 @@
 Web versi baru berbasis Supabase (PostgreSQL) + HTML statis.
 Tidak butuh Google Apps Script sama sekali.
 
-## Struktur File
+## Struktur  File
 ```
 config.js          → Konfigurasi Supabase URL & API Key 
 shared.js          → CSS, sidebar, toast, helper functions
