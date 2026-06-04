@@ -16,6 +16,8 @@ async function sbFetch(path, options = {}) {
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': options.prefer || '',
+      'Range-Unit': 'items',
+      'Range': '0-9999',
       ...(options.headers || {})
     }
   });
@@ -23,7 +25,6 @@ async function sbFetch(path, options = {}) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || `HTTP ${res.status}`);
   }
-  // DELETE & no-content response
   if (res.status === 204) return null;
   return res.json();
 }
