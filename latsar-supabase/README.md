@@ -1,4 +1,4 @@
-# Sistem Terminal — Versi Supabase
+# Sistem Terminal — Versi Supaba se
 
 Web versi baru berbasis Supabase (PostgreSQL) + HTML statis.
 Tidak butuh Google Apps Script sama sekali .
