@@ -267,7 +267,25 @@
 
   function cetakPDF() {
     if (!document.getElementById('printArea')) { showToast('error','Preview dulu sebelum cetak!'); return; }
+    
+    // Hitung jumlah baris data
+    const jumlahBaris = document.querySelectorAll('#printArea tbody tr').length;
+    
+    // Set zoom otomatis berdasarkan jumlah baris
+    let zoom = 1;
+    if (jumlahBaris > 25) zoom = 0.65;
+    else if (jumlahBaris > 20) zoom = 0.72;
+    else if (jumlahBaris > 15) zoom = 0.80;
+    else zoom = 0.90;
+
+    const printArea = document.getElementById('printArea');
+    const oriStyle = printArea.style.cssText;
+    printArea.style.cssText += `; transform: scale(${zoom}); transform-origin: top left; width: ${100/zoom}%;`;
+
     window.print();
+
+    // Kembalikan style setelah print
+    setTimeout(() => { printArea.style.cssText = oriStyle; }, 500);
   }
 
   async function downloadExcelRekap() {
