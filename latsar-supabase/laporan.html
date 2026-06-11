@@ -23,7 +23,7 @@
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
       #printArea {
-        position: fixed;
+        position: absolute;
         top: 0; left: 0;
         width: 100%;
         padding: 10px;
@@ -41,7 +41,12 @@
       }
       .laporan-table th { background:#d9d9d9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .laporan-table .total-row td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .ttd-area { margin-top: 10px !important; }
+      .ttd-area { 
+        margin-top: 15px !important; 
+        page-break-inside: avoid !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+      }
       .laporan-wrapper { display: block !important; visibility: visible !important; }
     }
   </style>
