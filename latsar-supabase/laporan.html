@@ -18,19 +18,20 @@
     .ttd-inner { text-align:center; font-size:11px; line-height:1.8; min-width:250px; }
 
     /* ── PRINT: sembunyikan semua kecuali printArea ── */
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: 330mm 215mm; margin: 6mm; } /* F4 landscape */
     @media print {
+      html { zoom: 75%; }
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
       #printArea {
         position: absolute;
         top: 0; left: 0;
         width: 100%;
-        padding: 6px;
+        padding: 4px;
         background: white !important;
       }
       .laporan-wrapper { display: block !important; visibility: visible !important; }
-      .laporan-table { font-size: 7.5px !important; width: 100% !important; display: table !important; }
+      .laporan-table { font-size: 8px !important; width: 100% !important; display: table !important; }
       .laporan-table thead { display: table-header-group !important; }
       .laporan-table tbody { display: table-row-group !important; }
       .laporan-table tr { display: table-row !important; page-break-inside: avoid; }
@@ -43,13 +44,13 @@
       .laporan-table th { background:#d9d9d9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .laporan-table .total-row td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .ttd-area {
-        margin-top: 6px !important;
+        margin-top: 4px !important;
         page-break-before: avoid !important;
         page-break-inside: avoid !important;
         display: flex !important;
         justify-content: flex-end !important;
       }
-      .ttd-inner { font-size: 9px !important; line-height: 1.5 !important; }
+      .ttd-inner { font-size: 8px !important; line-height: 1.4 !important; }
     }
   </style>
 </head>
@@ -267,23 +268,7 @@
 
   function cetakPDF() {
     if (!document.getElementById('printArea')) { showToast('error','Preview dulu sebelum cetak!'); return; }
-    
-    const jumlahBaris = document.querySelectorAll('#printArea tbody tr').length;
-    let zoom = 1;
-    if (jumlahBaris > 25) zoom = 0.63;
-    else if (jumlahBaris > 20) zoom = 0.72;
-    else if (jumlahBaris > 15) zoom = 0.80;
-    else zoom = 0.90;
-
-    // Inject style zoom ke head
-    const styleId = 'print-zoom-style';
-    let el = document.getElementById(styleId);
-    if (!el) { el = document.createElement('style'); el.id = styleId; document.head.appendChild(el); }
-    el.textContent = `@media print { #printArea { zoom: ${zoom} !important; } }`;
-
     window.print();
-
-    setTimeout(() => { el.textContent = ''; }, 1000);
   }
 
   async function downloadExcelRekap() {
