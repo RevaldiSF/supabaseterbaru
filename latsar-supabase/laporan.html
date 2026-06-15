@@ -338,6 +338,7 @@
       const rekapAll = await sbFetch(
         `rekap_bulanan?terminal=eq.${terminal}&tanggal=gte.${awal}&tanggal=lte.${akhir}&order=tanggal.asc,layanan.asc&limit=5000`
       );
+      console.log(`[DEBUG REKAP] total: ${rekapAll.length}, pertama: ${rekapAll[0]?.tanggal}, terakhir: ${rekapAll[rekapAll.length-1]?.tanggal}`);
 
       btn.textContent = '⏳ 2/3 Data harian...';
       let harian = [];
