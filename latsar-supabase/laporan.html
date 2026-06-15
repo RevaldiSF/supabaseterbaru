@@ -442,32 +442,35 @@
     ws.addRow([]);
 
     // R7-R9: Header
-    const r7 = ws.addRow(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'MPU':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']);
-    const r8 = ws.addRow(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']);
-    const r9 = ws.addRow([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);
+    const rH1 = ws.rowCount + 1;
+    ws.addRow(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'MPU':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']);
+    const rH2 = ws.rowCount + 1;
+    ws.addRow(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']);
+    const rH3 = ws.rowCount + 1;
+    ws.addRow([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);
 
-    // Merges
-    ws.mergeCells('A7:A8'); ws.mergeCells('B7:B8'); ws.mergeCells('C7:C8');
-    ws.mergeCells('D7:E7');
+    // Merges pakai rH1 yang dinamis
+    ws.mergeCells(rH1,1,rH2,1); ws.mergeCells(rH1,2,rH2,2); ws.mergeCells(rH1,3,rH2,3);
+    ws.mergeCells(rH1,4,rH1,5);
     if (isAKDP) {
-      ws.mergeCells('F7:I7');
+      ws.mergeCells(rH1,6,rH1,9);
     } else {
-      ws.mergeCells('F7:H7');
-      ws.mergeCells('I7:I8');
+      ws.mergeCells(rH1,6,rH1,8);
+      ws.mergeCells(rH1,9,rH2,9);
     }
-    ws.mergeCells('J7:J8'); ws.mergeCells('K7:K8'); ws.mergeCells('L7:L8');
-    ws.mergeCells('M7:N7');
-    ws.mergeCells('O7:P7');
-    ws.mergeCells('Q7:Q8');
+    ws.mergeCells(rH1,10,rH2,10); ws.mergeCells(rH1,11,rH2,11); ws.mergeCells(rH1,12,rH2,12);
+    ws.mergeCells(rH1,13,rH1,14);
+    ws.mergeCells(rH1,15,rH1,16);
+    ws.mergeCells(rH1,17,rH2,17);
 
     // Style header
     for (let c = 1; c <= 17; c++) {
-      styleHeader(ws.getCell(7,c));
-      styleHeader(ws.getCell(8,c));
-      styleHeader(ws.getCell(9,c), false);
+      styleHeader(ws.getCell(rH1,c));
+      styleHeader(ws.getCell(rH2,c));
+      styleHeader(ws.getCell(rH3,c), false);
     }
-    ws.getRow(7).height = 30;
-    ws.getRow(8).height = 25;
+    ws.getRow(rH1).height = 30;
+    ws.getRow(rH2).height = 25;
 
     // Data rows
     let tot = {jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak:0};
