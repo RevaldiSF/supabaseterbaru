@@ -20,8 +20,8 @@ laporan.html       → Cetak laporan (TODO)
 ```sql
 INSERT INTO users (username, password, nama_lengkap, terminal, role) VALUES
 ('admin', 'password123', 'Administrator', 'ADMIN', 'admin'),
-('ptg_pbg', 'password123', 'Petugas Purbalingga', 'PURBALINGGA', 'petugas'),
-('ptg_bnr', 'password123', 'Petugas Banjarnegara', 'BANJARNEGARA', 'petugas');
+('purbalingga', 'password123', 'Petugas Purbalingga', 'PURBALINGGA', 'petugas'),
+('banjarnegara', 'password123', 'Petugas Banjarnegara', 'BANJARNEGARA', 'petugas');
 ```
 
 ### 2. Isi tabel master_po sesuai data asli dari Google Sheets.
