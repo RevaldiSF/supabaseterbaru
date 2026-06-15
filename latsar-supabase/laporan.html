@@ -2,7 +2,6 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Laporan - Sistem Terminal</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -443,36 +442,9 @@
     ws.addRow([]);
 
     // R7-R9: Header
-    const r7 = ws.addRow([]);
-    ws.getCell(7,1).value = 'NO';
-    ws.getCell(7,2).value = 'TANGGAL';
-    ws.getCell(7,3).value = 'JUMLAH PO';
-    ws.getCell(7,4).value = 'KENDARAAN';
-    ws.getCell(7,6).value = 'JENIS BUS';
-    ws.getCell(7,10).value = 'JUMLAH SEAT TERSEDIA';
-    ws.getCell(7,11).value = 'JUMLAH PNP';
-    ws.getCell(7,12).value = 'LOAD FACTOR (%)';
-    ws.getCell(7,13).value = 'PENUMPANG';
-    ws.getCell(7,15).value = 'KONDISI KENDARAAN';
-    ws.getCell(7,17).value = 'KETERANGAN';
-
-    const r8 = ws.addRow([]);
-    ws.getCell(8,4).value = 'MASUK';
-    ws.getCell(8,5).value = 'KELUAR';
-    ws.getCell(8,6).value = 'BK';
-    ws.getCell(8,7).value = 'BS';
-    ws.getCell(8,8).value = 'BB';
-    if (isAKDP) ws.getCell(8,9).value = 'MPU';
-    ws.getCell(8,13).value = 'TURUN';
-    ws.getCell(8,14).value = 'NAIK';
-    ws.getCell(8,15).value = 'LAIK JALAN';
-    ws.getCell(8,16).value = 'TDK LAIK JALAN';
-
-    // R9: nomor kolom — langsung data mulai dari R10 (tidak ada row kosong)
-    const r9 = ws.addRow([]);
-    [1,2,3,4,5,null,null,null,null,6,7,'8 (7/6*100)',9,10,11,12,13].forEach((v,i) => {
-      if (v !== null) ws.getCell(9,i+1).value = v;
-    });
+    const r7 = ws.addRow(['NO','TANGGAL','JUMLAH PO','KENDARAAN','','JENIS BUS','','',isAKDP?'MPU':'','JUMLAH SEAT TERSEDIA','JUMLAH PNP','LOAD FACTOR (%)','PENUMPANG','','KONDISI KENDARAAN','','KETERANGAN']);
+    const r8 = ws.addRow(['','','','MASUK','KELUAR','BK','BS','BB',isAKDP?'MPU':'','','','','TURUN','NAIK','LAIK JALAN','TDK LAIK JALAN','']);
+    const r9 = ws.addRow([1,2,3,4,5,'','','','',6,7,'8 (7/6*100)',9,10,11,12,13]);
 
     // Merges
     ws.mergeCells('A7:A8'); ws.mergeCells('B7:B8'); ws.mergeCells('C7:C8');
@@ -618,7 +590,7 @@
       r4.getCell(19).font = {bold:true, name:'Arial'};
 
       ws.addRow([`Tanggal            : ${tglDisplay}`]);
-      ws.addRow([`Shift                  : 1`]);
+      ws.addRow([`Shift                  : `]);
 
       // Header
       const rH1 = ws.rowCount + 1;
