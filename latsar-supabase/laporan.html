@@ -441,8 +441,7 @@
     // R6: kosong
     ws.addRow([]);
 
-    // R7-R9: Header dengan merge yang benar
-    // Row 7
+    // R7-R9: Header
     const r7 = ws.addRow([]);
     ws.getCell(7,1).value = 'NO';
     ws.getCell(7,2).value = 'TANGGAL';
@@ -456,7 +455,6 @@
     ws.getCell(7,15).value = 'KONDISI KENDARAAN';
     ws.getCell(7,17).value = 'KETERANGAN';
 
-    // Row 8
     const r8 = ws.addRow([]);
     ws.getCell(8,4).value = 'MASUK';
     ws.getCell(8,5).value = 'KELUAR';
@@ -469,7 +467,7 @@
     ws.getCell(8,15).value = 'LAIK JALAN';
     ws.getCell(8,16).value = 'TDK LAIK JALAN';
 
-    // Row 9: nomor kolom
+    // R9: nomor kolom — langsung data mulai dari R10 (tidak ada row kosong)
     const r9 = ws.addRow([]);
     [1,2,3,4,5,null,null,null,null,6,7,'8 (7/6*100)',9,10,11,12,13].forEach((v,i) => {
       if (v !== null) ws.getCell(9,i+1).value = v;
@@ -477,19 +475,19 @@
 
     // Merges
     ws.mergeCells('A7:A8'); ws.mergeCells('B7:B8'); ws.mergeCells('C7:C8');
-    ws.mergeCells('D7:E7'); // KENDARAAN
+    ws.mergeCells('D7:E7');
     if (isAKDP) {
-      ws.mergeCells('F7:I7'); // JENIS BUS 4 kolom
+      ws.mergeCells('F7:I7');
     } else {
-      ws.mergeCells('F7:H7'); // JENIS BUS 3 kolom
-      ws.mergeCells('I7:I8'); // kolom kosong
+      ws.mergeCells('F7:H7');
+      ws.mergeCells('I7:I8');
     }
     ws.mergeCells('J7:J8'); ws.mergeCells('K7:K8'); ws.mergeCells('L7:L8');
-    ws.mergeCells('M7:N7'); // PENUMPANG
-    ws.mergeCells('O7:P7'); // KONDISI
-    ws.mergeCells('Q7:Q8'); // KETERANGAN
+    ws.mergeCells('M7:N7');
+    ws.mergeCells('O7:P7');
+    ws.mergeCells('Q7:Q8');
 
-    // Style semua header
+    // Style header
     for (let c = 1; c <= 17; c++) {
       styleHeader(ws.getCell(7,c));
       styleHeader(ws.getCell(8,c));
@@ -502,9 +500,11 @@
     let tot = {jml_po:0,bus_msk:0,bus_klr:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik:0,tidak:0};
     data.forEach((r,i) => {
       const lf = Number(r.seat)>0 ? Number(r.penumpang)/Number(r.seat) : 0;
-      const tgl = new Date(r.tanggal + 'T00:00:00');
+      // Fix timezone: pakai format DD/MM/YYYY langsung dari string tanggal
+      const [ty,tm,td] = r.tanggal.split('-');
+      const tglStr = `${td}/${tm}/${ty}`;
       const row = ws.addRow([
-        i+1, tgl,
+        i+1, tglStr,
         Number(r.jml_po)||0, Number(r.bus_msk)||0, Number(r.bus_klr)||0,
         Number(r.BK)||0, Number(r.BS)||0, Number(r.BB)||0,
         isAKDP?(Number(r.MPU)||0):'',
@@ -512,7 +512,6 @@
         Number(r.pnp_turun)||0, Number(r.pnp_naik)||0,
         Number(r.laik_jalan)||0, Number(r.tidak_laik)||0, ''
       ]);
-      row.getCell(2).numFmt = 'DD/MM/YYYY';
       row.getCell(12).numFmt = '0.00%';
       row.eachCell(cell => styleData(cell));
       tot.jml_po+=Number(r.jml_po)||0; tot.bus_msk+=Number(r.bus_msk)||0; tot.bus_klr+=Number(r.bus_klr)||0;
@@ -563,9 +562,9 @@
 
     let total = 0;
     data.forEach((r,i) => {
-      const tgl = new Date(r.tanggal + 'T00:00:00');
-      const row = ws.addRow([i+1, tgl, Number(r.jumlah_pengunjung)||0, r.keterangan||'']);
-      row.getCell(2).numFmt = 'DD/MM/YYYY';
+      const [ty,tm,td] = r.tanggal.split('-');
+      const tglStr = `${td}/${tm}/${ty}`;
+      const row = ws.addRow([i+1, tglStr, Number(r.jumlah_pengunjung)||0, r.keterangan||'']);
       row.eachCell(cell => styleData(cell));
       total += Number(r.jumlah_pengunjung)||0;
     });
