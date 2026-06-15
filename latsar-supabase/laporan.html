@@ -140,17 +140,18 @@
   document.getElementById('filterBulan').value = now.getMonth() + 1;
   document.getElementById('filterTahun').value = now.getFullYear();
 
-  // Hitung tanggal akhir bulan yang benar (tidak hardcode 31)
   function tglAkhirBulan(tahun, bulan) {
     return new Date(parseInt(tahun), parseInt(bulan), 0).getDate();
   }
 
   function tglRange(tahun, bulan) {
-    const pad = String(bulan).padStart(2,'0');
-    const akhir = tglAkhirBulan(tahun, bulan);
+    const b = parseInt(bulan);
+    const y = parseInt(tahun);
+    const pad = String(b).padStart(2,'0');
+    const akhir = new Date(y, b, 0).getDate();
     return {
-      awal: `${tahun}-${pad}-01`,
-      akhir: `${tahun}-${pad}-${String(akhir).padStart(2,'0')}`
+      awal: `${y}-${pad}-01`,
+      akhir: `${y}-${pad}-${String(akhir).padStart(2,'0')}`
     };
   }
 
@@ -331,7 +332,7 @@
       const layananList = terminal === 'PURBALINGGA' ? ['AKAP','AKDP','TRANS JATENG'] : ['AKAP','AKDP'];
       const { awal, akhir } = tglRange(tahun, bulan);
       const jumlahHari = tglAkhirBulan(tahun, bulan);
-      const bulanPad = String(bulan).padStart(2,'0');
+      const bulanPad = String(parseInt(bulan)).padStart(2,'0');
 
       btn.textContent = '⏳ 1/3 Rekap bulanan...';
       const rekapAll = await sbFetch(
