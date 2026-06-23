@@ -223,7 +223,7 @@ const RekapBulanan = {
         bulan, tahun, tanggal: tgl, terminal, layanan,
         jml_po: poUnik.size,
         bus_msk: data.length,
-        bus_klr: data.filter(r => !r.bermalam).length,
+        bus_klr: data.filter(r => !(r.keterangan || '').toLowerCase().includes('bermalam')).length,
         BK: data.reduce((s,r) => s + (Number(r.BK)||0), 0),
         BS: data.reduce((s,r) => s + (Number(r.BS)||0), 0),
         BB: data.reduce((s,r) => s + (Number(r.BB)||0), 0),
