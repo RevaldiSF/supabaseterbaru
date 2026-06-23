@@ -724,16 +724,55 @@
     } catch(e) { showToast('error','Gagal update: '+e.message); }
   }
 
+  <!-- Modal Hapus Data -->
+<div id="modalHapus" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;overflow-y:auto;backdrop-filter:blur(4px);">
+  <div style="background:#fff;max-width:400px;margin:40px auto;border-radius:16px;padding:28px 24px;position:relative;animation:popIn 0.25s ease;text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+    <h3 style="margin:0 0 8px;color:#c62828;font-size:18px;">Hapus Data</h3>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin-bottom:6px;">Yakin ingin menghapus data ini?</p>
+    <p style="color:#888;font-size:12px;margin-bottom:20px;">Rekap bulanan akan otomatis diperbarui.</p>
+    <input type="hidden" id="hapusId" />
+    <input type="hidden" id="hapusTanggal" />
+    <input type="hidden" id="hapusLayanan" />
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button onclick="hapusDataConfirm()" style="background:#c62828;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='#b71c1c'" onmouseout="this.style.background='#c62828'">🗑️ Ya, Hapus</button>
+      <button onclick="tutupModalHapus()" style="background:#757575;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='#616161'" onmouseout="this.style.background='#757575'">✖ Batal</button>
+    </div>
+  </div>
+</div>
+
   // ── Hapus Data ───────────────────────────────────────────────────────────
-  async function hapusData(id, tanggal, layanan) {
-    if (!confirm('Yakin ingin menghapus data ini?\nRekap bulanan akan otomatis diperbarui.')) return;
-    try {
-      await sbFetch(`data_harian?id=eq.${id}`, {method:'DELETE', prefer:'return=minimal'});
-      await updateRekap(tanggal, TERMINAL, layanan);
-      showToast('success','Data berhasil dihapus!');
-      loadTabel();
-    } catch(e) { showToast('error','Gagal hapus: '+e.message); }
+ function hapusData(id, tanggal, layanan) {
+  // Simpan data ke hidden input
+  document.getElementById('hapusId').value = id;
+  document.getElementById('hapusTanggal').value = tanggal;
+  document.getElementById('hapusLayanan').value = layanan;
+  // Tampilkan modal hapus
+  document.getElementById('modalHapus').style.display = 'block';
+}
+
+// Fungsi konfirmasi hapus (dipanggil dari tombol "Ya, Hapus")
+async function hapusDataConfirm() {
+  const id = document.getElementById('hapusId').value;
+  const tanggal = document.getElementById('hapusTanggal').value;
+  const layanan = document.getElementById('hapusLayanan').value;
+  
+  try {
+    await sbFetch(`data_harian?id=eq.${id}`, {method:'DELETE', prefer:'return=minimal'});
+    await updateRekap(tanggal, TERMINAL, layanan);
+    showToast('success','Data berhasil dihapus!');
+    tutupModalHapus();
+    loadTabel();
+  } catch(e) { 
+    showToast('error','Gagal hapus: '+e.message);
+    tutupModalHapus();
   }
+}
+
+// Tutup modal hapus
+function tutupModalHapus() {
+  document.getElementById('modalHapus').style.display = 'none';
+}
 
   // ── Reset form ───────────────────────────────────────────────────────────
   function resetForm() {
