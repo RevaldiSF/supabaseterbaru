@@ -89,10 +89,7 @@
   /* LOADING */
   .loading { text-align:center; padding:25px; color:#777; font-size:13px; }
   .spinner { display:inline-block; width:18px; height:18px; border:3px solid #e0e0e0; border-top-color:#1a237e; border-radius:50%; animation:spin .8s linear infinite; margin-right:8px; vertical-align:middle; }
-  @keyframes popIn {
-  from { transform:scale(0.85); opacity:0; }
-  to   { transform:scale(1);    opacity:1; }
-}
+  @keyframes spin { to { transform:rotate(360deg); } }
 
   /* RESPONSIVE */
   @media (min-width:769px) { .mobile-toggle { display:none !important; } .sidebar { transform:translateX(0) !important; } }
