@@ -553,9 +553,23 @@
       pnp_naik:a.pnp_naik+(r.pnp_naik||0), pnp_turun:a.pnp_turun+(r.pnp_turun||0),
       laik_jalan:a.laik_jalan+(r.laik||0), tidak_laik:a.tidak_laik+(r.tidak_laik||0)
     }),{bus_msk:0,BK:0,BS:0,BB:0,MPU:0,seat:0,penumpang:0,pnp_naik:0,pnp_turun:0,laik_jalan:0,tidak_laik:0});
+    
+    // 🔥 PERBAIKAN DI SINI: Hitung bus keluar (yang TIDAK bermalam)
+    const busKeluar = rows.filter(r => !(r.keterangan || '').toLowerCase().includes('bermalam')).length;
+    
     const d = new Date(tanggal);
-    const rekap = {bulan:d.getMonth()+1,tahun:d.getFullYear(),tanggal,terminal,layanan,
-      jml_po:poUnik.size,bus_klr:tot.bus_msk,...tot,updated_at:new Date().toISOString()};
+    const rekap = {
+      bulan:d.getMonth()+1,
+      tahun:d.getFullYear(),
+      tanggal,
+      terminal,
+      layanan,
+      jml_po:poUnik.size,
+      bus_klr:busKeluar,  // ✅ PAKAI busKeluar, BUKAN tot.bus_msk
+      ...tot,
+      updated_at:new Date().toISOString()
+    };
+    
     const existing = await sbFetch(`rekap_bulanan?tanggal=eq.${tanggal}&terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(layanan)}`);
     if (existing.length)
       await sbFetch(`rekap_bulanan?tanggal=eq.${tanggal}&terminal=eq.${terminal}&layanan=eq.${encodeURIComponent(layanan)}`,{method:'PATCH',body:JSON.stringify(rekap),prefer:'return=minimal'});
