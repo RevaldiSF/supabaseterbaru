@@ -339,7 +339,7 @@
   // ── Load histori nomor bus ───────────────────────────────────────────────
   async function loadHistoriBus() {
     try {
-      const data = await sbFetch(`data_harian?terminal=eq.${TERMINAL}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek,BK,BS,BB,MPU&order=created_at.desc&limit=500`);
+      const data = await sbFetch(`data_harian?terminal=eq.${TERMINAL}&layanan=eq.${encodeURIComponent(layananAktif)}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek,BK,BS,BB,MPU&order=created_at.desc&limit=500`);
       const seen = new Set();
       masterBus = data.filter(r => {
   if (!r.nomor_bus || seen.has(r.nomor_bus)) return false;
@@ -471,15 +471,16 @@
 
 
   function setLayanan(l) {
-    layananAktif = l;
-    document.getElementById('btnAKAP').className = l==='AKAP'?'btn btn-primary':'btn btn-secondary';
-    document.getElementById('btnAKDP').className = l==='AKDP'?'btn btn-primary':'btn btn-secondary';
+  layananAktif = l;
+  document.getElementById('btnAKAP').className = l==='AKAP'?'btn btn-primary':'btn btn-secondary';
+  document.getElementById('btnAKDP').className = l==='AKDP'?'btn btn-primary':'btn btn-secondary';
 
-    document.getElementById('labelMPU').style.display = l==='AKDP'?'':'none';
-    document.getElementById('labelFormBus').textContent = `📝 Form Input Bus — ${l}`;
-    if (l!=='AKDP') for(let r of document.getElementsByName('jenisBus')) if(r.value==='MPU') r.checked=false;
-    loadPO(l);
-  }
+  document.getElementById('labelMPU').style.display = l==='AKDP'?'':'none';
+  document.getElementById('labelFormBus').textContent = `📝 Form Input Bus — ${l}`;
+  if (l!=='AKDP') for(let r of document.getElementsByName('jenisBus')) if(r.value==='MPU') r.checked=false;
+  loadPO(l);
+  loadHistoriBus(); // 🔥 Tambahin ini
+}
 
   // ── PO berubah → filter trayek ───────────────────────────────────────────
   async function onPOChange() {
