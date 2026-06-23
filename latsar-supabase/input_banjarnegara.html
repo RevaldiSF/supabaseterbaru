@@ -339,12 +339,15 @@
   // ── Load histori nomor bus ───────────────────────────────────────────────
   async function loadHistoriBus() {
     try {
-      const data = await sbFetch(`data_harian?terminal=eq.${TERMINAL}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek&order=created_at.desc&limit=500`);
+      const data = await sbFetch(`data_harian?terminal=eq.${TERMINAL}&select=nomor_bus,nama_po,koperasi,jml_seat,trayek,BK,BS,BB,MPU&order=created_at.desc&limit=500`);
       const seen = new Set();
       masterBus = data.filter(r => {
-        if (!r.nomor_bus || seen.has(r.nomor_bus)) return false;
-        seen.add(r.nomor_bus); return true;
-      });
+  if (!r.nomor_bus || seen.has(r.nomor_bus)) return false;
+  seen.add(r.nomor_bus); return true;
+}).map(r => ({
+  ...r,
+  jenis: r.BK ? 'BK' : r.BS ? 'BS' : r.BB ? 'BB' : r.MPU ? 'MPU' : 'BK'
+}));
     } catch(e) { masterBus = []; }
   }
 
@@ -375,44 +378,56 @@
     if (!val || val.length < 2) { sugesti.style.display='none'; return; }
     const hasil = masterBus.filter(r => r.nomor_bus.toUpperCase().includes(val.toUpperCase())).slice(0,8);
     if (!hasil.length) { sugesti.style.display='none'; return; }
-    sugesti.innerHTML = hasil.map(r =>
-      `<div onclick="pilihBus('${r.nomor_bus}','${(r.nama_po||'').replace(/'/g,"\\'")}','${(r.koperasi||'').replace(/'/g,"\\'")}',${r.jml_seat||0},'${(r.trayek||'').replace(/'/g,"\\'")}')"
-        style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;"
-        onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='white'">
-        <strong>${r.nomor_bus}</strong>
-        <span style="color:#777;font-size:11px;">— ${r.nama_po||''} ${r.trayek?'('+r.trayek+')':''}</span>
-      </div>`
-    ).join('');
+    sugesti.innerHTML = hasil.map(r => {
+  const jenisLabel = r.jenis || 'BK';
+  return `<div onclick="pilihBus('${r.nomor_bus}','${(r.nama_po||'').replace(/'/g,"\\'")}','${(r.koperasi||'').replace(/'/g,"\\'")}',${r.jml_seat||0},'${(r.trayek||'').replace(/'/g,"\\'")}','${jenisLabel}')"
+    style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;"
+    onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='white'">
+    <strong>${r.nomor_bus}</strong>
+    <span style="color:#777;font-size:11px;">— ${r.nama_po||''} ${r.trayek?'('+r.trayek+')':''} <span style="background:#e0e0e0;padding:1px 6px;border-radius:4px;font-size:10px;">${jenisLabel}</span></span>
+  </div>`;
+}).join('');
     sugesti.style.display = 'block';
   }
 
-  async function pilihBus(nomor, namaPo, koperasi, seat, trayek) {
-    document.getElementById('nomor_bus').value = nomor;
-    document.getElementById('sugestiBus').style.display = 'none';
-    if (koperasi) document.getElementById('koperasi').value = koperasi;
-    if (seat && document.getElementById('jml_seat').value == 0)
-      document.getElementById('jml_seat').value = seat;
+  async function pilihBus(nomor, namaPo, koperasi, seat, trayek, jenis) {
+  document.getElementById('nomor_bus').value = nomor;
+  document.getElementById('sugestiBus').style.display = 'none';
+  if (koperasi) document.getElementById('koperasi').value = koperasi;
+  if (seat && document.getElementById('jml_seat').value == 0)
+    document.getElementById('jml_seat').value = seat;
 
-    // Auto-pilih PO
-    if (namaPo) {
-      const sel = document.getElementById('nama_po');
-      for (let i=0; i<sel.options.length; i++) {
-        if (sel.options[i].text.trim() === namaPo.trim()) {
-          sel.selectedIndex = i;
-          await onPOChange(); // tunggu trayek ke-load
-          break;
-        }
-      }
-    }
-
-    // Auto-pilih trayek setelah PO ke-load
-    if (trayek) {
-      const selT = document.getElementById('trayek');
-      for (let i=0; i<selT.options.length; i++) {
-        if (selT.options[i].value === trayek) { selT.selectedIndex = i; break; }
+  // 🔥 AUTO-PILIH JENIS BUS
+  if (jenis) {
+    const radios = document.getElementsByName('jenisBus');
+    for (let r of radios) {
+      if (r.value === jenis) {
+        r.checked = true;
+        break;
       }
     }
   }
+
+  // Auto-pilih PO
+  if (namaPo) {
+    const sel = document.getElementById('nama_po');
+    for (let i=0; i<sel.options.length; i++) {
+      if (sel.options[i].text.trim() === namaPo.trim()) {
+        sel.selectedIndex = i;
+        await onPOChange(); // tunggu trayek ke-load
+        break;
+      }
+    }
+  }
+
+  // Auto-pilih trayek setelah PO ke-load
+  if (trayek) {
+    const selT = document.getElementById('trayek');
+    for (let i=0; i<selT.options.length; i++) {
+      if (selT.options[i].value === trayek) { selT.selectedIndex = i; break; }
+    }
+  }
+}
 
   // ── Toggle input manual PO ───────────────────────────────────────────────
   function togglePOManual() {
