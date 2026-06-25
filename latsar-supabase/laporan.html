@@ -18,9 +18,8 @@
     .ttd-inner { text-align:center; font-size:11px; line-height:1.8; min-width:250px; }
 
     /* ── PRINT: sembunyikan semua kecuali printArea ── */
-    @page { size: 330mm 215mm; margin: 6mm; } /* F4 landscape */
+    @page { size: 330mm 215mm; margin: 5mm; } /* F4 landscape */
     @media print {
-      html { zoom: 75%; }
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
       #printArea {
@@ -31,26 +30,27 @@
         background: white !important;
       }
       .laporan-wrapper { display: block !important; visibility: visible !important; }
-      .laporan-table { font-size: 8px !important; width: 100% !important; display: table !important; }
+      .laporan-table { font-size: 9px !important; width: 100% !important; display: table !important; table-layout: fixed !important; }
       .laporan-table thead { display: table-header-group !important; }
       .laporan-table tbody { display: table-row-group !important; }
       .laporan-table tr { display: table-row !important; page-break-inside: avoid; }
       .laporan-table th, .laporan-table td {
         display: table-cell !important;
-        padding: 2px 3px !important;
+        padding: 4px 3px !important;
         border: 1px solid #000 !important;
         visibility: visible !important;
+        word-wrap: break-word !important;
       }
       .laporan-table th { background:#d9d9d9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .laporan-table .total-row td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .ttd-area {
-        margin-top: 4px !important;
+        margin-top: 8px !important;
         page-break-before: avoid !important;
         page-break-inside: avoid !important;
         display: flex !important;
         justify-content: flex-end !important;
       }
-      .ttd-inner { font-size: 8px !important; line-height: 1.4 !important; }
+      .ttd-inner { font-size: 10px !important; line-height: 1.8 !important; }
     }
   </style>
 </head>
