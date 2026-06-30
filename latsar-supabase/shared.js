@@ -105,6 +105,31 @@
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);
+
+    /* ── PWA Install Button ── */
+  .pwa-install-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #1a237e;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(26,35,126,0.4);
+    cursor: pointer;
+    z-index: 999;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    animation: popIn 0.3s ease;
+  }
+  .pwa-install-btn:hover { opacity: 0.9; }
+  @media (max-width: 768px) {
+    .pwa-install-btn { bottom: 16px; right: 16px; padding: 10px 16px; font-size: 12px; }
+  }
 })();
 
 // Build sidebar HTML
@@ -205,3 +230,40 @@ function toDisplayDate(str) {
 function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
+
+// ── PWA Install (tampilkan tombol install di HP) ──
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstallButton();
+});
+
+function showInstallButton() {
+  let btn = document.getElementById('pwaInstallBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'pwaInstallBtn';
+    btn.className = 'pwa-install-btn';
+    btn.innerHTML = '📲 Install Aplikasi';
+    btn.onclick = installPWA;
+    document.body.appendChild(btn);
+  }
+  btn.style.display = 'flex';
+}
+
+async function installPWA() {
+  if (!deferredPrompt) return;
+  const result = await deferredPrompt.prompt();
+  if (result.outcome === 'accepted') {
+    document.getElementById('pwaInstallBtn')?.remove();
+    showToast('success', 'Aplikasi berhasil diinstall! 🎉');
+  }
+  deferredPrompt = null;
+}
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('pwaInstallBtn')?.remove();
+  showToast('success', 'Terima kasih sudah menginstall aplikasi! 🙏');
+});
