@@ -1,5 +1,5 @@
 // ============================================================
-//  SHARED UI — styles, sidebar, toast, helpers
+//  SHARED UI — styles, sidebar, toast, helpers 
 // ============================================================
 
 // Inject global CSS
