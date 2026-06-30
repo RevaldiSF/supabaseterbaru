@@ -86,7 +86,7 @@
 
   function masukTamu() {
     const btn = document.getElementById('btnTamu');
-    btn.disabled = true; btn.textContent = '⏳ Memproses...';
+    btn.disabled = true; btn.textContent = '⏳ Memproses..';
     // Simpan session tamu - hanya bisa akses dashboard
     Auth.save({ id:0, username:'tamu', nama:'Tamu', terminal:'Semua', role:'tamu' });
     window.location.href = 'dashboard.html';
